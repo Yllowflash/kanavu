@@ -1,0 +1,929 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Kanavu — Connecting Dreams</title>
+<style>
+  :root {
+    --ink: #f4efff;
+    --ink-dim: rgba(244, 239, 255, 0.65);
+    --accent: #ffd9ec;
+    --glow: #9be7ff;
+  }
+  * { margin: 0; padding: 0; box-sizing: border-box; -webkit-tap-highlight-color: transparent; }
+  html, body { height: 100%; overflow: hidden; }
+  body {
+    font-family: Georgia, 'Times New Roman', serif;
+    color: var(--ink);
+    background: linear-gradient(180deg, #0b1035 0%, #1b1b4d 34%, #3b2a63 62%, #6b3f7a 82%, #a86a8b 100%);
+    user-select: none;
+  }
+
+  /* ---------- starfield ---------- */
+  #stars { position: fixed; inset: 0; z-index: 0; pointer-events: none; }
+
+  .screen { position: fixed; inset: 0; z-index: 2; display: flex; flex-direction: column;
+            align-items: center; justify-content: center; text-align: center;
+            transition: opacity 1.1s ease; }
+  .screen.hidden { opacity: 0; pointer-events: none; }
+
+  /* ---------- title screen ---------- */
+  .moon-halo {
+    width: 120px; height: 120px; border-radius: 50%;
+    background: radial-gradient(circle, #fffbe8 0%, #fdf3cf 45%, rgba(253,243,207,0) 72%);
+    box-shadow: 0 0 80px 30px rgba(255, 251, 232, 0.25);
+    margin-bottom: 34px; animation: haloPulse 6s ease-in-out infinite;
+  }
+  @keyframes haloPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+
+  h1.title {
+    font-size: clamp(64px, 16vw, 132px); font-weight: 400; letter-spacing: 0.14em;
+    text-indent: 0.14em; line-height: 1;
+    background: linear-gradient(180deg, #ffffff 20%, #ffe9f4 55%, #b9a7ff 100%);
+    -webkit-background-clip: text; background-clip: text; color: transparent;
+    text-shadow: 0 0 60px rgba(185, 167, 255, 0.35);
+  }
+  .tagline {
+    margin-top: 14px; font-size: clamp(15px, 3.4vw, 22px); letter-spacing: 0.52em;
+    text-indent: 0.52em; color: var(--ink-dim); font-style: italic;
+  }
+  .tamil { margin-top: 10px; font-size: 15px; letter-spacing: 0.2em; color: rgba(255,217,236,0.55); }
+
+  .btn {
+    margin-top: 52px; padding: 16px 64px; font-family: inherit;
+    font-size: 19px; letter-spacing: 0.3em; text-indent: 0.3em; cursor: pointer;
+    color: #241b3f; background: linear-gradient(180deg, #fff7fb, #ffd9ec);
+    border: none; border-radius: 999px;
+    box-shadow: 0 0 34px rgba(255, 217, 236, 0.45), 0 6px 18px rgba(0,0,0,0.35);
+    transition: transform 0.25s ease, box-shadow 0.25s ease;
+  }
+  .btn:hover { transform: translateY(-2px) scale(1.03); box-shadow: 0 0 50px rgba(255,217,236,0.65), 0 8px 22px rgba(0,0,0,0.4); }
+  .btn:active { transform: scale(0.97); }
+
+  .foot { position: absolute; bottom: 26px; font-size: 13px; letter-spacing: 0.24em;
+          color: rgba(244,239,255,0.4); font-style: italic; }
+
+  /* ---------- island screen ---------- */
+  #game-screen { justify-content: flex-start; }
+  #scene-wrap { position: fixed; inset: 0; z-index: 1; }
+  #scene-wrap canvas { display: block; }
+  .scene-fallback { position: absolute; inset: 0; display: flex; flex-direction: column;
+    align-items: center; justify-content: center; text-align: center;
+    color: #cfd4ff; font-size: 15px; line-height: 1.8; padding: 24px; }
+
+  .hud-top {
+    z-index: 3; width: 100%; padding: 14px 18px 0;
+    display: flex; align-items: center; justify-content: space-between;
+    pointer-events: none;
+  }
+  .hud-top > * { pointer-events: auto; }
+  .hud-title { font-size: 20px; letter-spacing: 0.3em; text-indent: 0.1em;
+               text-shadow: 0 2px 12px rgba(0,0,0,0.6); }
+  .hud-sub { font-size: 12px; letter-spacing: 0.2em; color: var(--ink-dim); margin-top: 4px; font-style: italic; }
+
+  .pill {
+    font-family: inherit; font-size: 14px; letter-spacing: 0.12em; cursor: pointer;
+    color: var(--ink); background: rgba(20, 16, 48, 0.55); border: 1px solid rgba(244,239,255,0.25);
+    padding: 10px 18px; border-radius: 999px; backdrop-filter: blur(6px);
+    transition: background 0.2s ease, transform 0.2s ease;
+  }
+  .pill:hover { background: rgba(60, 48, 110, 0.65); transform: translateY(-1px); }
+
+  .hud-bottom {
+    z-index: 3; position: absolute; bottom: 0; width: 100%;
+    display: flex; gap: 10px; justify-content: center; flex-wrap: wrap;
+    padding: 0 14px 22px;
+  }
+  .toast {
+    z-index: 4; position: absolute; bottom: 92px; left: 50%; transform: translateX(-50%) translateY(10px);
+    background: rgba(20, 16, 48, 0.85); border: 1px solid rgba(255,217,236,0.35);
+    color: var(--ink); font-size: 15px; font-style: italic; letter-spacing: 0.06em;
+    padding: 12px 26px; border-radius: 999px; opacity: 0; pointer-events: none;
+    transition: opacity 0.35s ease, transform 0.35s ease; white-space: nowrap;
+    box-shadow: 0 0 30px rgba(155, 231, 255, 0.25);
+  }
+  .toast.show { opacity: 1; transform: translateX(-50%) translateY(0); }
+
+  .hint { z-index: 3; position: absolute; bottom: 88px; width: 100%; text-align: center;
+          font-size: 12px; letter-spacing: 0.28em; color: rgba(244,239,255,0.45); font-style: italic;
+          pointer-events: none; }
+
+  /* ---------- auth / profile / pairing screens (Phase 2) ---------- */
+  .card {
+    z-index: 3; width: min(420px, calc(100% - 48px));
+    background: rgba(18, 14, 44, 0.72);
+    border: 1px solid rgba(244, 239, 255, 0.18);
+    border-radius: 22px; padding: 30px 28px;
+    backdrop-filter: blur(10px); -webkit-backdrop-filter: blur(10px);
+    box-shadow: 0 12px 50px rgba(0, 0, 0, 0.45), 0 0 40px rgba(155, 231, 255, 0.08);
+  }
+  .card h2 { font-weight: 400; font-size: 25px; letter-spacing: 0.16em; text-indent: 0.16em; margin-bottom: 8px; }
+  .card .sub { font-size: 14px; font-style: italic; color: var(--ink-dim); margin-bottom: 20px; letter-spacing: 0.04em; }
+  .field { text-align: left; margin-bottom: 15px; }
+  .field label { display: block; font-size: 11.5px; letter-spacing: 0.24em; text-transform: uppercase;
+                 color: var(--ink-dim); margin-bottom: 7px; }
+  .field input {
+    width: 100%; font-family: inherit; font-size: 17px; color: var(--ink);
+    background: rgba(244, 239, 255, 0.08);
+    border: 1px solid rgba(244, 239, 255, 0.25); border-radius: 12px;
+    padding: 13px 15px; outline: none;
+    user-select: text; -webkit-user-select: text;
+  }
+  .field input:focus { border-color: var(--glow); box-shadow: 0 0 0 3px rgba(155, 231, 255, 0.15); }
+  .btn.small { margin-top: 16px; padding: 13px 38px; font-size: 15px; }
+  .btn:disabled { opacity: 0.55; cursor: wait; transform: none; }
+  .btn-row { display: flex; gap: 12px; justify-content: center; flex-wrap: wrap; }
+  .btn-row .btn.small { padding: 13px 26px; }
+  .form-err { min-height: 20px; font-size: 13.5px; font-style: italic; color: #ffb3c8; margin-top: 12px; }
+  .form-ok { min-height: 20px; font-size: 13.5px; font-style: italic; color: #b8f0d0; margin-top: 12px; }
+  .link { background: none; border: none; cursor: pointer; font-family: inherit;
+          font-size: 14px; font-style: italic; color: var(--glow); letter-spacing: 0.06em;
+          margin-top: 16px; text-decoration: underline; text-underline-offset: 3px; }
+  .code-big {
+    font-size: clamp(42px, 12vw, 60px); letter-spacing: 0.28em; text-indent: 0.28em;
+    color: #fff; text-shadow: 0 0 30px rgba(155, 231, 255, 0.6);
+    background: rgba(244, 239, 255, 0.07); border: 1px dashed rgba(155, 231, 255, 0.5);
+    border-radius: 16px; padding: 18px 10px; margin: 16px 0 6px;
+    user-select: text; -webkit-user-select: text;
+  }
+  .pill.static { cursor: default; }
+  .pill.static:hover { background: rgba(20, 16, 48, 0.55); transform: none; }
+  #pair-pill.waiting { border-color: rgba(255, 217, 236, 0.6); color: var(--accent); }
+  #pair-pill.connected { border-color: rgba(184, 240, 208, 0.6); color: #d9f5e4; }
+  .hidden-el { display: none !important; }
+</style>
+</head>
+<body>
+
+<canvas id="stars"></canvas>
+
+<!-- ============ TITLE SCREEN ============ -->
+<div id="title-screen" class="screen">
+  <div class="moon-halo"></div>
+  <h1 class="title">Kanavu</h1>
+  <div class="tagline">Connecting Dreams</div>
+  <div class="tamil">கனவு — "dream"</div>
+  <button class="btn" id="begin-btn">Begin</button>
+  <div class="foot">a world for two, across every timezone</div>
+</div>
+
+<!-- ============ AUTH SCREEN (Phase 2) ============ -->
+<div id="auth-screen" class="screen hidden">
+  <div class="card">
+    <h2 id="auth-title">Welcome back</h2>
+    <div class="sub">sign in to your island</div>
+    <div class="field"><label for="auth-email">Email</label><input id="auth-email" type="email" autocomplete="email" placeholder="you@example.com" /></div>
+    <div class="field"><label for="auth-pass">Password</label><input id="auth-pass" type="password" autocomplete="current-password" placeholder="••••••••" /></div>
+    <button class="btn small" id="auth-submit">Sign in</button>
+    <div class="form-err" id="auth-err"></div>
+    <div class="form-ok" id="auth-ok"></div>
+    <button class="link" id="auth-toggle">new here? create an account</button>
+  </div>
+</div>
+
+<!-- ============ PROFILE SCREEN (Phase 2) ============ -->
+<div id="profile-screen" class="screen hidden">
+  <div class="card">
+    <h2>Your island</h2>
+    <div class="sub">a few details to make it yours</div>
+    <div class="field"><label for="prof-name">Your name</label><input id="prof-name" type="text" maxlength="40" placeholder="e.g. Adi" /></div>
+    <div class="field"><label for="prof-island">Island name</label><input id="prof-island" type="text" maxlength="40" placeholder="e.g. Dream Isle" /></div>
+    <div class="field"><label for="prof-country">Country</label><input id="prof-country" type="text" maxlength="60" placeholder="e.g. Canada" /></div>
+    <div class="field"><label for="prof-tz">Timezone</label><input id="prof-tz" type="text" maxlength="60" placeholder="e.g. America/Vancouver" /></div>
+    <button class="btn small" id="prof-save">Save &amp; continue</button>
+    <div class="form-err" id="prof-err"></div>
+  </div>
+</div>
+
+<!-- ============ PAIRING SCREEN (Phase 2) ============ -->
+<div id="pair-screen" class="screen hidden">
+  <div class="card">
+    <h2>Find your person</h2>
+    <div class="sub">one of you creates a code, the other joins with it</div>
+    <div id="pair-choose">
+      <div class="btn-row">
+        <button class="btn small" id="pair-create-btn">Create invite code</button>
+        <button class="btn small" id="pair-join-toggle">Join with a code</button>
+      </div>
+    </div>
+    <div id="pair-created" class="hidden-el">
+      <div class="sub">share this code with your partner</div>
+      <div class="code-big" id="pair-code">······</div>
+      <div class="sub" id="pair-wait-note">waiting for them to join…</div>
+      <div class="btn-row"><button class="btn small" id="pair-continue">Continue to my island</button></div>
+    </div>
+    <div id="pair-join" class="hidden-el">
+      <div class="field"><label for="pair-code-input">Invite code</label><input id="pair-code-input" type="text" maxlength="6" autocomplete="off" placeholder="ABC123" style="text-transform:uppercase; letter-spacing:0.3em; text-align:center;" /></div>
+      <div class="btn-row"><button class="btn small" id="pair-join-btn">Join</button></div>
+    </div>
+    <div class="form-err" id="pair-err"></div>
+    <button class="link" id="signout-link">sign out</button>
+  </div>
+</div>
+
+<!-- ============ ISLAND SCREEN ============ -->
+<div id="game-screen" class="screen hidden">
+  <div id="scene-wrap"></div>
+  <div class="hud-top">
+    <div>
+      <div class="hud-title">Kanavu</div>
+      <div class="hud-sub" id="hud-sub">your island · scaffold preview</div>
+    </div>
+    <div class="pill static hidden-el" id="pair-pill">…</div>
+    <button class="pill" id="back-btn">← Title</button>
+  </div>
+  <div class="hint">drag to look around</div>
+  <div class="hud-bottom">
+    <button class="pill" data-stub="Decorating your island — Phase 2">🏡 Decorate</button>
+    <button class="pill" data-stub="Time travel to your partner's island — Phase 2">✈ Travel</button>
+    <button class="pill" data-stub="Gifts &amp; drawings — Phase 3">🎁 Gifts</button>
+    <button class="pill" data-stub="Text &amp; voice chat — Phase 3">💬 Chat</button>
+    <button class="pill" data-stub="Ludo · Carrom · Fishing &amp; more — Phase 4">🎲 Games</button>
+  </div>
+  <div class="toast" id="toast"></div>
+</div>
+
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="config.js"></script>
+<script>
+/* ================================================================
+   Kanavu — Phase 2: auth + invite-code pairing wired to Supabase.
+   Flow: Title → Begin → (offline? demo) → Auth → Profile setup
+         → Pairing (create/join invite code) → Island.
+   Falls back to the offline island demo if Supabase is unreachable.
+   config.js holds the backend URL + publishable key (public by design).
+   ================================================================ */
+(function () {
+  'use strict';
+
+  /* ---------------- twinkling starfield (title) ---------------- */
+  const starCanvas = document.getElementById('stars');
+  const sctx = starCanvas.getContext('2d');
+  let starList = [];
+  function sizeStars() {
+    starCanvas.width = innerWidth; starCanvas.height = innerHeight;
+    starList = [];
+    const n = Math.floor(innerWidth * innerHeight / 4200);
+    for (let i = 0; i < n; i++) {
+      starList.push({
+        x: Math.random() * starCanvas.width,
+        y: Math.random() * starCanvas.height,
+        r: Math.random() * 1.6 + 0.3,
+        p: Math.random() * Math.PI * 2,
+        s: 0.4 + Math.random() * 1.2
+      });
+    }
+  }
+  sizeStars();
+  addEventListener('resize', sizeStars);
+  (function drawStars(t) {
+    sctx.clearRect(0, 0, starCanvas.width, starCanvas.height);
+    const time = (t || 0) / 1000;
+    for (const st of starList) {
+      const a = 0.25 + 0.65 * Math.abs(Math.sin(time * st.s + st.p));
+      sctx.globalAlpha = a;
+      sctx.fillStyle = '#ffffff';
+      sctx.beginPath();
+      sctx.arc(st.x, st.y, st.r, 0, Math.PI * 2);
+      sctx.fill();
+    }
+    sctx.globalAlpha = 1;
+    requestAnimationFrame(drawStars);
+  })();
+
+  /* ---------------- screens ---------------- */
+  const titleScreen = document.getElementById('title-screen');
+  const gameScreen = document.getElementById('game-screen');
+  const toast = document.getElementById('toast');
+  let toastTimer = null;
+  function showToast(msg) {
+    toast.textContent = msg;
+    toast.classList.add('show');
+    clearTimeout(toastTimer);
+    toastTimer = setTimeout(() => toast.classList.remove('show'), 2600);
+  }
+  document.querySelectorAll('[data-stub]').forEach(btn => {
+    btn.addEventListener('click', () => showToast(btn.getAttribute('data-stub')));
+  });
+
+  /* ---------------- three.js island scene ---------------- */
+  let scene3d = null; // built lazily on first Begin
+
+  function buildScene() {
+    if (typeof THREE === 'undefined') {
+      // Three.js CDN failed (offline): graceful fallback, never a dead screen.
+      document.getElementById('scene-wrap').innerHTML =
+        '<div class="scene-fallback"><p>✨ the 3D island couldn\'t load — you look offline.</p>' +
+        '<p>Reconnect and it will be here waiting.</p></div>';
+      scene3d = { fallback: true };
+      return;
+    }
+    const wrap = document.getElementById('scene-wrap');
+    const W = () => wrap.clientWidth, H = () => wrap.clientHeight;
+
+    const renderer = new THREE.WebGLRenderer({ antialias: true, alpha: true });
+    renderer.setPixelRatio(Math.min(devicePixelRatio, 2));
+    renderer.setSize(W(), H());
+    wrap.appendChild(renderer.domElement);
+
+    const scene = new THREE.Scene();
+    scene.fog = new THREE.FogExp2(0x1b1b4d, 0.016);
+
+    const camera = new THREE.PerspectiveCamera(50, W() / H(), 0.1, 400);
+
+    // Soft dreamy lighting: cool ambient + warm moonlight + gentle fill
+    scene.add(new THREE.AmbientLight(0x8f9bff, 0.55));
+    const moonLight = new THREE.DirectionalLight(0xfff3d6, 1.05);
+    moonLight.position.set(-30, 42, 18);
+    scene.add(moonLight);
+    const fill = new THREE.HemisphereLight(0xb9a7ff, 0x1c2b4a, 0.5);
+    scene.add(fill);
+
+    // ---- ocean: big soft disc, gently rippling ----
+    const oceanGeo = new THREE.CircleGeometry(120, 72, 0, Math.PI * 2);
+    // add a ring of segments for wave animation
+    const oceanPos = oceanGeo.attributes.position;
+    const oceanBase = oceanPos.array.slice();
+    const ocean = new THREE.Mesh(
+      oceanGeo,
+      new THREE.MeshPhongMaterial({ color: 0x274b73, shininess: 90, specular: 0x9be7ff,
+                                    transparent: true, opacity: 0.96, flatShading: true })
+    );
+    ocean.rotation.x = -Math.PI / 2;
+    ocean.position.y = -0.4;
+    scene.add(ocean);
+
+    // ---- island: soft rounded mound, pastel ----
+    function makeIsland() {
+      const geo = new THREE.SphereGeometry(16, 40, 28, 0, Math.PI * 2, 0, Math.PI / 2);
+      const pos = geo.attributes.position;
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
+        // gentle organic lumps
+        const lump = 1 + 0.10 * Math.sin(x * 0.55) * Math.cos(z * 0.5)
+                       + 0.06 * Math.sin(x * 1.3 + z * 0.9);
+        pos.setXYZ(i, x * lump, y * 0.42 * lump, z * lump);
+      }
+      geo.computeVertexNormals();
+      const mat = new THREE.MeshStandardMaterial({ color: 0x9fd8a8, flatShading: true, roughness: 1 });
+      const m = new THREE.Mesh(geo, mat);
+      // sandy rim: a slightly larger, flatter disc underneath
+      const rim = new THREE.Mesh(
+        new THREE.CylinderGeometry(17.2, 18.6, 1.6, 40),
+        new THREE.MeshStandardMaterial({ color: 0xf2e3c2, flatShading: true, roughness: 1 })
+      );
+      rim.position.y = -0.7;
+      const g = new THREE.Group();
+      g.add(rim); g.add(m);
+      return g;
+    }
+    const island = makeIsland();
+    scene.add(island);
+
+    // ---- tiny pond ----
+    const pond = new THREE.Mesh(
+      new THREE.CircleGeometry(2.6, 24),
+      new THREE.MeshPhongMaterial({ color: 0x9be7ff, shininess: 120, specular: 0xffffff,
+                                    transparent: true, opacity: 0.9 })
+    );
+    pond.rotation.x = -Math.PI / 2;
+    pond.position.set(5.5, groundY(5.5, 3.5), 3.5);
+    scene.add(pond);
+
+    // ---- pastel low-poly trees ----
+    function tree(x, z, s, tint) {
+      const g = new THREE.Group();
+      const trunk = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.28 * s, 0.4 * s, 1.6 * s, 7),
+        new THREE.MeshStandardMaterial({ color: 0x8a6a52, flatShading: true, roughness: 1 })
+      );
+      trunk.position.y = 0.8 * s;
+      const c1 = new THREE.Mesh(
+        new THREE.ConeGeometry(1.7 * s, 2.6 * s, 8),
+        new THREE.MeshStandardMaterial({ color: tint, flatShading: true, roughness: 1 })
+      );
+      c1.position.y = 2.6 * s;
+      const c2 = new THREE.Mesh(
+        new THREE.ConeGeometry(1.2 * s, 1.9 * s, 8),
+        new THREE.MeshStandardMaterial({ color: tint, flatShading: true, roughness: 1 })
+      );
+      c2.position.y = 3.9 * s;
+      g.add(trunk, c1, c2);
+      g.position.set(x, groundY(x, z), z);
+      g.rotation.y = Math.random() * Math.PI * 2;
+      return g;
+    }
+    // approx island surface height at (x,z): dome of radius 16 squashed 0.42
+    function islandTopY(x, z) {
+      const r = Math.sqrt(x * x + z * z);
+      if (r >= 16) return 0;
+      return Math.sqrt(16 * 16 - r * r) * 0.42;
+    }
+    // placement height: sunk slightly so props never float above the lumpy dome
+    function groundY(x, z) { return islandTopY(x, z) - 0.3; }
+    const treeTints = [0x7cc79a, 0x8fd6a4, 0x6fbf8f, 0xa8e0b8];
+    [[-7, -4, 1.2], [-3.5, -7.5, 0.9], [7.5, -5.5, 1.05], [-8.5, 4.5, 1.0],
+     [2.5, 7.8, 0.85], [9.5, 4.0, 1.15], [-1.5, 1.5, 1.3]].forEach(([x, z, s], i) => {
+      scene.add(tree(x, z, s, treeTints[i % treeTints.length]));
+    });
+
+    // ---- glowing lanterns (emissive, no extra lights) ----
+    function lantern(x, z) {
+      const g = new THREE.Group();
+      const post = new THREE.Mesh(
+        new THREE.CylinderGeometry(0.12, 0.16, 2.2, 6),
+        new THREE.MeshStandardMaterial({ color: 0x4a3f66, roughness: 1 })
+      );
+      post.position.y = 1.1;
+      const bulb = new THREE.Mesh(
+        new THREE.SphereGeometry(0.42, 12, 10),
+        new THREE.MeshBasicMaterial({ color: 0xffe9a8 })
+      );
+      bulb.position.y = 2.45;
+      const halo = new THREE.Mesh(
+        new THREE.SphereGeometry(0.85, 12, 10),
+        new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.18 })
+      );
+      halo.position.y = 2.45;
+      g.add(post, bulb, halo);
+      g.position.set(x, groundY(x, z), z);
+      return g;
+    }
+    scene.add(lantern(-4.5, 2.0));
+    scene.add(lantern(3.8, -2.2));
+
+    // ---- two little spirit placeholders (boy: teal cape, girl: rose cape) ----
+    function spirit(capeColor, x, z, phase) {
+      const g = new THREE.Group();
+      const cape = new THREE.Mesh(
+        new THREE.ConeGeometry(0.85, 2.1, 10),
+        new THREE.MeshStandardMaterial({ color: capeColor, flatShading: true, roughness: 0.9 })
+      );
+      cape.position.y = 1.05;
+      const mask = new THREE.Mesh(
+        new THREE.SphereGeometry(0.5, 14, 12),
+        new THREE.MeshStandardMaterial({ color: 0xfff6e8, roughness: 0.6 })
+      );
+      mask.position.y = 2.15;
+      mask.scale.set(0.85, 1.05, 0.9);
+      // soft inner glow
+      const glow = new THREE.Mesh(
+        new THREE.SphereGeometry(0.95, 12, 10),
+        new THREE.MeshBasicMaterial({ color: capeColor, transparent: true, opacity: 0.16 })
+      );
+      glow.position.y = 1.5;
+      g.add(cape, mask, glow);
+      g.position.set(x, groundY(x, z), z);
+      g.userData.phase = phase;
+      return g;
+    }
+    const boySpirit = spirit(0x5fc6c9, -1.8, 0.6, 0);
+    const girlSpirit = spirit(0xf2a7c3, 1.6, 0.9, Math.PI);
+    boySpirit.lookAt(girlSpirit.position.x, boySpirit.position.y, girlSpirit.position.z);
+    girlSpirit.lookAt(boySpirit.position.x, girlSpirit.position.y, boySpirit.position.z);
+    scene.add(boySpirit, girlSpirit);
+
+    // ---- moon ----
+    const moon = new THREE.Mesh(
+      new THREE.SphereGeometry(6, 24, 18),
+      new THREE.MeshBasicMaterial({ color: 0xfffbe8 })
+    );
+    moon.position.set(-70, 55, -80);
+    const moonHalo = new THREE.Mesh(
+      new THREE.SphereGeometry(9.5, 24, 18),
+      new THREE.MeshBasicMaterial({ color: 0xfffbe8, transparent: true, opacity: 0.14 })
+    );
+    moonHalo.position.copy(moon.position);
+    scene.add(moon, moonHalo);
+
+    // ---- stars (3D points) ----
+    const starGeo = new THREE.BufferGeometry();
+    const starPos = [];
+    for (let i = 0; i < 700; i++) {
+      const th = Math.random() * Math.PI * 2, ph = Math.random() * Math.PI * 0.48;
+      const r = 150;
+      starPos.push(r * Math.sin(ph) * Math.cos(th), r * Math.cos(ph) * 0.9 + 6, r * Math.sin(ph) * Math.sin(th));
+    }
+    starGeo.setAttribute('position', new THREE.Float32BufferAttribute(starPos, 3));
+    scene.add(new THREE.Points(starGeo, new THREE.PointsMaterial({ color: 0xffffff, size: 0.9, sizeAttenuation: false, transparent: true, opacity: 0.85 })));
+
+    // ---- drifting clouds ----
+    const clouds = [];
+    const cloudMat = new THREE.MeshBasicMaterial({ color: 0xd9cdf2, transparent: true, opacity: 0.5 });
+    for (let i = 0; i < 5; i++) {
+      const c = new THREE.Group();
+      for (let j = 0; j < 4; j++) {
+        const puff = new THREE.Mesh(new THREE.SphereGeometry(2.4 + Math.random() * 2, 10, 8), cloudMat);
+        puff.position.set(j * 3 - 4.5 + Math.random(), Math.random() * 1.2, Math.random() * 2 - 1);
+        puff.scale.y = 0.55;
+        c.add(puff);
+      }
+      const a = (i / 5) * Math.PI * 2;
+      c.position.set(Math.cos(a) * 55, 26 + Math.random() * 10, Math.sin(a) * 55);
+      c.userData.speed = 0.4 + Math.random() * 0.5;
+      clouds.push(c); scene.add(c);
+    }
+
+    // ---- fireflies ----
+    const ffGeo = new THREE.BufferGeometry();
+    const ffPos = new Float32Array(60 * 3);
+    const ffSeed = [];
+    for (let i = 0; i < 60; i++) {
+      const a = Math.random() * Math.PI * 2, r = 4 + Math.random() * 14;
+      ffSeed.push({ x: Math.cos(a) * r, z: Math.sin(a) * r, y: 2 + Math.random() * 5, p: Math.random() * 9 });
+      ffPos[i * 3] = ffSeed[i].x; ffPos[i * 3 + 1] = ffSeed[i].y; ffPos[i * 3 + 2] = ffSeed[i].z;
+    }
+    ffGeo.setAttribute('position', new THREE.BufferAttribute(ffPos, 3));
+    const fireflies = new THREE.Points(ffGeo,
+      new THREE.PointsMaterial({ color: 0xffe9a8, size: 0.35, transparent: true, opacity: 0.9 }));
+    scene.add(fireflies);
+
+    /* ----- simple orbit: slow auto-rotate + drag ----- */
+    let angle = 0.6, radius = 34, height = 16, dragging = false, lastX = 0, autoSpin = true;
+    const el = renderer.domElement;
+    el.style.touchAction = 'none';
+    el.addEventListener('pointerdown', e => { dragging = true; autoSpin = false; lastX = e.clientX; el.setPointerCapture(e.pointerId); });
+    el.addEventListener('pointermove', e => { if (dragging) { angle -= (e.clientX - lastX) * 0.008; lastX = e.clientX; } });
+    el.addEventListener('pointerup', () => { dragging = false; setTimeout(() => autoSpin = true, 4000); });
+    el.addEventListener('wheel', e => {
+      radius = Math.min(60, Math.max(20, radius + e.deltaY * 0.03));
+      height = Math.min(30, Math.max(9, height + e.deltaY * 0.012));
+    }, { passive: true });
+
+    addEventListener('resize', () => {
+      camera.aspect = W() / H();
+      camera.updateProjectionMatrix();
+      renderer.setSize(W(), H());
+    });
+
+    const clock = new THREE.Clock();
+    (function animate() {
+      requestAnimationFrame(animate);
+      const t = clock.getElapsedTime();
+
+      if (autoSpin && !dragging) angle += 0.0016;
+      camera.position.set(Math.cos(angle) * radius, height + Math.sin(t * 0.25) * 1.2, Math.sin(angle) * radius);
+      camera.lookAt(0, 3.4, 0);
+
+      // ocean ripple
+      for (let i = 0; i < oceanPos.count; i++) {
+        const bx = oceanBase[i * 3], by = oceanBase[i * 3 + 1];
+        oceanPos.setZ(i, Math.sin(bx * 0.35 + t * 1.1) * 0.35 + Math.cos(by * 0.3 + t * 0.9) * 0.35);
+      }
+      oceanPos.needsUpdate = true;
+      oceanGeo.computeVertexNormals();
+
+      // spirits bob gently, facing each other
+      boySpirit.position.y = groundY(-1.8, 0.6) + Math.sin(t * 1.4) * 0.18;
+      girlSpirit.position.y = groundY(1.6, 0.9) + Math.sin(t * 1.4 + Math.PI) * 0.18;
+
+      // clouds drift
+      for (const c of clouds) {
+        c.rotation.y += 0.0006 * c.userData.speed;
+        c.position.y += Math.sin(t * 0.4 + c.position.x) * 0.002;
+      }
+
+      // fireflies wander
+      const fp = ffGeo.attributes.position;
+      for (let i = 0; i < 60; i++) {
+        const s = ffSeed[i];
+        fp.setXYZ(i,
+          s.x + Math.sin(t * 0.7 + s.p) * 1.4,
+          s.y + Math.sin(t * 1.1 + s.p * 2) * 0.8,
+          s.z + Math.cos(t * 0.6 + s.p) * 1.4);
+      }
+      fp.needsUpdate = true;
+
+      renderer.render(scene, camera);
+    })();
+
+    scene3d = { renderer, scene };
+  }
+
+  /* ---------------- supabase backend: auth + pairing (Phase 2) ---------------- */
+  const sb = (() => {
+    try {
+      if (typeof window.supabase === 'undefined') return null; // CDN failed (offline)
+      if (!window.KANAVU_CONFIG || !window.KANAVU_CONFIG.backendReady) return null;
+      return window.supabase.createClient(
+        window.KANAVU_CONFIG.SUPABASE_URL,
+        window.KANAVU_CONFIG.SUPABASE_ANON_KEY
+      );
+    } catch (e) { return null; }
+  })();
+
+  const appState = { user: null, profile: null, pair: null, offline: false, pollTimer: null };
+
+  function showScreen(id) {
+    document.querySelectorAll('.screen').forEach(s => s.classList.add('hidden'));
+    document.getElementById(id).classList.remove('hidden');
+  }
+
+  function withTimeout(promise, ms) {
+    return Promise.race([
+      promise,
+      new Promise((_, reject) => setTimeout(() => reject(new Error('timeout')), ms))
+    ]);
+  }
+
+  // Any server response (rows, RLS-filtered empty, even a SQL error) proves we're
+  // online. Only network failures / timeouts count as offline.
+  async function backendReachable() {
+    if (!sb) return false;
+    try {
+      const { error } = await withTimeout(
+        sb.from('profiles').select('id').limit(1).then(r => r, e => ({ error: e })),
+        8000
+      );
+      if (error) {
+        const m = String((error && error.message) || error || '');
+        if (/failed to fetch|networkerror|load failed|fetch failed|timeout/i.test(m)) return false;
+      }
+      return true;
+    } catch (e) { return false; }
+  }
+
+  async function getProfile(uid) {
+    const { data, error } = await sb.from('profiles').select('*').eq('id', uid).maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+
+  async function getMyPair(uid) {
+    const { data, error } = await sb.from('pairs').select('*')
+      .or('partner_a.eq.' + uid + ',partner_b.eq.' + uid)
+      .order('created_at', { ascending: false })
+      .limit(1).maybeSingle();
+    if (error) throw error;
+    return data;
+  }
+
+  function updatePairPill() {
+    const pill = document.getElementById('pair-pill');
+    const pair = appState.pair;
+    if (!pair) { pill.classList.add('hidden-el'); return; }
+    pill.classList.remove('hidden-el');
+    if (pair.partner_b) {
+      pill.textContent = 'Connected ♥';
+      pill.classList.remove('waiting'); pill.classList.add('connected');
+    } else {
+      pill.textContent = 'Waiting for partner…';
+      pill.classList.remove('connected'); pill.classList.add('waiting');
+    }
+  }
+
+  function stopPairPoll() {
+    if (appState.pollTimer) { clearInterval(appState.pollTimer); appState.pollTimer = null; }
+  }
+
+  // Watches for the partner joining — works from the pair screen or the island.
+  function ensurePairPoller() {
+    if (appState.pollTimer || !appState.pair || appState.pair.partner_b || !appState.user) return;
+    appState.pollTimer = setInterval(async () => {
+      try {
+        const pair = await getMyPair(appState.user.id);
+        if (pair && pair.partner_b) {
+          appState.pair = pair;
+          stopPairPoll();
+          updatePairPill();
+          const note = document.getElementById('pair-wait-note');
+          if (note) note.textContent = 'they joined ♥';
+          showToast('Your partner joined ♥');
+        }
+      } catch (e) { /* keep polling */ }
+    }, 5000);
+  }
+
+  function enterIsland() {
+    stopPairPoll(); // re-armed below if still waiting for partner
+    showScreen('game-screen');
+    if (!scene3d) buildScene();
+    const hudSub = document.getElementById('hud-sub');
+    if (appState.offline) {
+      hudSub.textContent = 'offline demo';
+      document.getElementById('pair-pill').classList.add('hidden-el');
+      setTimeout(() => showToast('Offline demo — connect to sign in'), 900);
+    } else {
+      hudSub.textContent = (appState.profile && appState.profile.island_name)
+        ? appState.profile.island_name + ' · your island'
+        : 'your island';
+      updatePairPill();
+      ensurePairPoller();
+    }
+  }
+
+  async function afterAuth(user) {
+    appState.user = user;
+    let profile = null;
+    try { profile = await getProfile(user.id); } catch (e) { profile = null; }
+    if (!profile) {
+      const { error } = await sb.from('profiles').insert({ id: user.id });
+      if (error && error.code !== '23505') throw error; // 23505 = raced insert, ignore
+      profile = await getProfile(user.id);
+    }
+    appState.profile = profile;
+    if (!profile || !profile.display_name) {
+      try {
+        document.getElementById('prof-tz').value =
+          (Intl.DateTimeFormat().resolvedOptions() || {}).timeZone || '';
+      } catch (e) {}
+      if (profile && profile.display_name) document.getElementById('prof-name').value = profile.display_name;
+      if (profile && profile.island_name) document.getElementById('prof-island').value = profile.island_name;
+      showScreen('profile-screen');
+      return;
+    }
+    let pair = null;
+    try { pair = await getMyPair(user.id); } catch (e) { pair = null; }
+    if (!pair) { resetPairScreen(); showScreen('pair-screen'); return; }
+    appState.pair = pair;
+    enterIsland();
+  }
+
+  /* ----- auth screen ----- */
+  let authMode = 'signin';
+  const authTitle = document.getElementById('auth-title');
+  const authSub = document.querySelector('#auth-screen .sub');
+  const authSubmit = document.getElementById('auth-submit');
+  const authToggle = document.getElementById('auth-toggle');
+  const authErr = document.getElementById('auth-err');
+  const authOk = document.getElementById('auth-ok');
+
+  authToggle.addEventListener('click', () => {
+    authMode = authMode === 'signin' ? 'signup' : 'signin';
+    authTitle.textContent = authMode === 'signin' ? 'Welcome back' : 'Create your account';
+    authSub.textContent = authMode === 'signin' ? 'sign in to your island' : 'your island is waiting';
+    authSubmit.textContent = authMode === 'signin' ? 'Sign in' : 'Sign up';
+    authToggle.textContent = authMode === 'signin'
+      ? 'new here? create an account' : 'already have an account? sign in';
+    authErr.textContent = ''; authOk.textContent = '';
+  });
+
+  function friendlyAuthError(e) {
+    const m = String((e && e.message) || e || '');
+    if (/invalid login credentials/i.test(m)) return 'Hmm — that email or password doesn\u2019t match. Try again?';
+    if (/user already registered/i.test(m)) return 'That email already has an account — try signing in instead.';
+    if (/email not confirmed/i.test(m)) return 'Please confirm your email first — check your inbox.';
+    if (/password/i.test(m) && /weak|short|length/i.test(m)) return 'Please choose a slightly longer password.';
+    return m || 'Something went wrong — please try again.';
+  }
+
+  authSubmit.addEventListener('click', async () => {
+    const email = document.getElementById('auth-email').value.trim();
+    const password = document.getElementById('auth-pass').value;
+    authErr.textContent = ''; authOk.textContent = '';
+    if (!email || !password) { authErr.textContent = 'Please enter your email and password.'; return; }
+    authSubmit.disabled = true;
+    try {
+      if (authMode === 'signup') {
+        const { data, error } = await sb.auth.signUp({ email, password });
+        if (error) throw error;
+        if (data.session) { await afterAuth(data.session.user); }
+        else {
+          authOk.textContent = 'Account created — check your inbox to confirm your email, then sign in.';
+        }
+      } else {
+        const { data, error } = await sb.auth.signInWithPassword({ email, password });
+        if (error) throw error;
+        await afterAuth(data.user);
+      }
+    } catch (e) { authErr.textContent = friendlyAuthError(e); }
+    finally { authSubmit.disabled = false; }
+  });
+  document.getElementById('auth-pass').addEventListener('keydown', e => {
+    if (e.key === 'Enter') authSubmit.click();
+  });
+
+  /* ----- profile setup ----- */
+  document.getElementById('prof-save').addEventListener('click', async () => {
+    const errEl = document.getElementById('prof-err');
+    errEl.textContent = '';
+    const display_name = document.getElementById('prof-name').value.trim();
+    const island_name = document.getElementById('prof-island').value.trim();
+    const country = document.getElementById('prof-country').value.trim();
+    const timezone = document.getElementById('prof-tz').value.trim();
+    if (!display_name || !island_name) {
+      errEl.textContent = 'Give yourself a name, and your island one too.';
+      return;
+    }
+    const btn = document.getElementById('prof-save');
+    btn.disabled = true;
+    try {
+      const { data, error } = await sb.from('profiles')
+        .upsert({ id: appState.user.id, display_name, island_name, country, timezone },
+                { onConflict: 'id' })
+        .select().single();
+      if (error) throw error;
+      appState.profile = data;
+      let pair = null;
+      try { pair = await getMyPair(appState.user.id); } catch (e) { pair = null; }
+      if (!pair) { resetPairScreen(); showScreen('pair-screen'); return; }
+      appState.pair = pair;
+      enterIsland();
+    } catch (e) { errEl.textContent = friendlyAuthError(e); }
+    finally { btn.disabled = false; }
+  });
+
+  /* ----- pairing ----- */
+  const pairChoose = document.getElementById('pair-choose');
+  const pairCreated = document.getElementById('pair-created');
+  const pairJoin = document.getElementById('pair-join');
+  const pairErr = document.getElementById('pair-err');
+
+  function resetPairScreen() {
+    stopPairPoll();
+    pairErr.textContent = '';
+    document.getElementById('pair-code-input').value = '';
+    pairChoose.classList.remove('hidden-el');
+    pairCreated.classList.add('hidden-el');
+    pairJoin.classList.add('hidden-el');
+  }
+
+  document.getElementById('pair-create-btn').addEventListener('click', async () => {
+    pairErr.textContent = '';
+    const btn = document.getElementById('pair-create-btn');
+    btn.disabled = true;
+    try {
+      const { data, error } = await sb.rpc('create_pair');
+      if (error) throw error;
+      appState.pair = data; // row: { id, invite_code, partner_a, partner_b, created_at }
+      document.getElementById('pair-code').textContent = data.invite_code;
+      document.getElementById('pair-wait-note').textContent = 'waiting for them to join…';
+      pairChoose.classList.add('hidden-el');
+      pairCreated.classList.remove('hidden-el');
+      ensurePairPoller();
+    } catch (e) { pairErr.textContent = friendlyAuthError(e); }
+    finally { btn.disabled = false; }
+  });
+
+  document.getElementById('pair-join-toggle').addEventListener('click', () => {
+    pairErr.textContent = '';
+    pairChoose.classList.add('hidden-el');
+    pairJoin.classList.remove('hidden-el');
+    document.getElementById('pair-code-input').focus();
+  });
+
+  document.getElementById('pair-join-btn').addEventListener('click', async () => {
+    pairErr.textContent = '';
+    const code = document.getElementById('pair-code-input').value.trim().toUpperCase();
+    if (!code) { pairErr.textContent = 'Enter the 6-character code your partner shared.'; return; }
+    const btn = document.getElementById('pair-join-btn');
+    btn.disabled = true;
+    try {
+      const { data, error } = await sb.rpc('join_pair', { p_code: code });
+      if (error) throw error;
+      let pair = null;
+      try { pair = await getMyPair(appState.user.id); } catch (e) { pair = null; }
+      appState.pair = pair || { id: data, invite_code: code, partner_a: null, partner_b: appState.user.id };
+      enterIsland();
+      setTimeout(() => showToast('Connected ♥'), 700);
+    } catch (e) {
+      const m = String((e && e.message) || '');
+      pairErr.textContent = /invalid or already-used/i.test(m)
+        ? 'That code didn\u2019t work — check it with your partner and try again.'
+        : friendlyAuthError(e);
+    }
+    finally { btn.disabled = false; }
+  });
+  document.getElementById('pair-code-input').addEventListener('keydown', e => {
+    if (e.key === 'Enter') document.getElementById('pair-join-btn').click();
+  });
+
+  document.getElementById('pair-continue').addEventListener('click', () => enterIsland());
+
+  document.getElementById('signout-link').addEventListener('click', async () => {
+    stopPairPoll();
+    try { await sb.auth.signOut(); } catch (e) {}
+    appState.user = null; appState.profile = null; appState.pair = null; appState.offline = false;
+    showScreen('title-screen');
+  });
+
+  /* ---------------- wire up screens ---------------- */
+  document.getElementById('begin-btn').addEventListener('click', async () => {
+    const btn = document.getElementById('begin-btn');
+    btn.disabled = true;
+    const orig = btn.textContent;
+    btn.textContent = '···';
+    try {
+      const online = await backendReachable();
+      if (!online) { appState.offline = true; enterIsland(); return; }
+      const { data: { session }, error } = await sb.auth.getSession();
+      if (error) throw error;
+      if (!session) { showScreen('auth-screen'); return; }
+      await afterAuth(session.user);
+    } catch (e) {
+      appState.offline = true; // fail soft into the demo
+      enterIsland();
+    } finally {
+      btn.disabled = false;
+      btn.textContent = orig;
+    }
+  });
+  document.getElementById('back-btn').addEventListener('click', () => {
+    showScreen('title-screen');
+  });
+})();
+</script>
+</body>
+</html>
