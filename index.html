@@ -521,7 +521,7 @@
     // ---- island: big dreamy isle — sandy beach ring, grassy hill, village plaza ----
     const ISLAND_R = 27, SQUASH = 0.42, SINK = 0.18;
     const PLAZA = { x: 0, z: 0, r: 10, blend: 5, y: 9.2 };
-    const WALK_R = 28.5;
+    const WALK_R = 31.5; // grass + plaza + dry beach (waterline ≈ 33.5, never into water)
     function sstep(a, b, x) {
       const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
       return t * t * (3 - 2 * t);
@@ -530,7 +530,7 @@
     function terrainY(x, z) {
       const r = Math.hypot(x, z);
       let y = r < ISLAND_R ? Math.sqrt(ISLAND_R * ISLAND_R - r * r) * SQUASH : 0;
-      if (r >= ISLAND_R) y = -1.0 * sstep(ISLAND_R, 34, r); // beach dips gently under the waves
+      if (r >= ISLAND_R) y = -0.12 * sstep(ISLAND_R, 33, r) - 1.6 * sstep(32.5, 36, r); // broad flat sandy shelf, then dips under the waves
       const lump = 1 + 0.10 * Math.sin(x * 0.55) * Math.cos(z * 0.5)
                      + 0.06 * Math.sin(x * 1.3 + z * 0.9);
       const pd = Math.hypot(x - PLAZA.x, z - PLAZA.z);
@@ -672,6 +672,53 @@
       disc.position.set(x, PLAZA.y - SINK + 0.04, z);
       scene.add(disc);
     });
+
+    // ---- winding garden paths: plaza → beach, plaza → hilltop lookout, plaza → pond ----
+    const PATH_COLOR = 0xdcc489; // sandy-stone, a shade darker than the plaza
+    function makePath(waypoints, width) {
+      const pts = waypoints.map(([x, z]) => new THREE.Vector3(x, 0, z));
+      const curve = new THREE.CatmullRomCurve3(pts);
+      const segs = Math.max(16, waypoints.length * 10), across = 5;
+      const positions = [], indices = [];
+      for (let i = 0; i <= segs; i++) {
+        const t = i / segs;
+        const p = curve.getPoint(t);
+        const tan = curve.getTangent(t); tan.y = 0;
+        if (tan.lengthSq() < 1e-6) tan.set(1, 0, 0); else tan.normalize();
+        const nx = -tan.z, nz = tan.x;
+        const wob = width * (0.85 + 0.3 * Math.sin(t * 9 + 1.7)); // soft organic edges
+        for (let j = 0; j < across; j++) {
+          const off = (j / (across - 1) - 0.5) * wob;
+          const x = p.x + nx * off, z = p.z + nz * off;
+          positions.push(x, terrainY(x, z) + 0.09, z);
+        }
+        if (i < segs) {
+          const a = i * across;
+          for (let j = 0; j < across - 1; j++) {
+            indices.push(a + j, a + j + 1, a + j + across,
+                         a + j + 1, a + j + across + 1, a + j + across);
+          }
+        }
+      }
+      const geo = new THREE.BufferGeometry();
+      geo.setAttribute('position', new THREE.Float32BufferAttribute(positions, 3));
+      geo.setIndex(indices);
+      geo.computeVertexNormals();
+      return new THREE.Mesh(geo, new THREE.MeshStandardMaterial({
+        color: PATH_COLOR, flatShading: true, roughness: 1, side: THREE.DoubleSide,
+        polygonOffset: true, polygonOffsetFactor: -2, polygonOffsetUnits: -2 }));
+    }
+    scene.add(makePath([[7, 5], [11, 9], [16, 13], [21, 16], [26, 19]], 2.0));   // plaza → beach
+    scene.add(makePath([[-7, -3], [-10, -7], [-12, -11], [-14, -14]], 1.8));      // plaza → lookout
+    scene.add(makePath([[-6, 4], [-10, 6], [-12.5, 7.5]], 1.6));                  // plaza → pond
+    // hilltop lookout: a little stone disc at the end of the hill path
+    const lookout = new THREE.Mesh(new THREE.CircleGeometry(2.7, 20),
+      new THREE.MeshStandardMaterial({ color: PATH_COLOR, flatShading: true, roughness: 1,
+        side: THREE.DoubleSide, polygonOffset: true, polygonOffsetFactor: -2,
+        polygonOffsetUnits: -2 }));
+    lookout.rotation.x = -Math.PI / 2;
+    lookout.position.set(-14, terrainY(-14, -14) + 0.07, -14);
+    scene.add(lookout);
 
     // ---- two little spirit placeholders (boy: teal cape, girl: rose cape) ----
     function spirit(capeColor, x, z, phase) {
@@ -1340,6 +1387,7 @@
     pond:      { label: 'Pond',      emoji: '💧' },
     fence:     { label: 'Fence',     emoji: '🪵' },
     bench:     { label: 'Bench',     emoji: '🪑' },
+    path:      { label: 'Path',      emoji: '🪨' },
     home:      { label: 'Home',      emoji: '🏠' },
     stage:     { label: 'Stage',     emoji: '🎤' },
     draw:      { label: 'Draw',      emoji: '🎨' },
@@ -1354,7 +1402,9 @@
                        home: 2.8, stage: 3.4, draw: 0.9 };
   function refreshDecoColliders() {
     if (!scene3d || scene3d.fallback) return;
-    scene3d.decoColliders = deco.items.map(d => ({ x: d.x, z: d.z, r: DECO_RADII[d.t] || 1 }));
+    // path tiles are walkable — you stroll ON them, so they get no collider
+    scene3d.decoColliders = deco.items.filter(d => d.t !== 'path')
+      .map(d => ({ x: d.x, z: d.z, r: DECO_RADII[d.t] || 1 }));
   }
 
   function decoMat(color) {
@@ -1483,6 +1533,16 @@
     });
     return g;
   }
+  // player-laid path tile — snaps to a 2-unit grid so tiles join into walkways
+  function buildPathTile() {
+    const g = new THREE.Group();
+    const tile = new THREE.Mesh(new THREE.BoxGeometry(2.2, 0.16, 2.2), decoMat(0xdcc489));
+    tile.position.y = 0.10;
+    const inset = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.06, 1.5), decoMat(0xd2ba7f));
+    inset.position.y = 0.20;
+    g.add(tile, inset);
+    return g;
+  }
   // buildable home — cfg: {wall, wallColor, roof, roofColor, doorColor}
   function buildHome(cfg) {
     cfg = cfg || {};
@@ -1595,6 +1655,7 @@
       case 'pond':      return buildPondDeco();
       case 'fence':     return buildFence();
       case 'bench':     return buildBench();
+      case 'path':      return buildPathTile();
       case 'home':      return buildHome(def.cfg);
       case 'stage':     return buildStage();
       case 'drawing':   return buildDrawingFrame(def._tex || null);
@@ -1617,7 +1678,7 @@
     const hits = castAt(clientX, clientY).intersectObject(scene3d.dome, false);
     if (!hits.length) return null;
     const p = hits[0].point;
-    if (Math.hypot(p.x, p.z) > 26) return null; // keep things on the grass + plaza, off the beach
+    if (Math.hypot(p.x, p.z) > 31) return null; // grass + plaza + dry beach — never in the water
     return p;
   }
   function pickDeco(clientX, clientY) {
@@ -1669,13 +1730,16 @@
     pl.position.set(-2.5, scene3d.partnerGroundY(-2.5, 3.5), 3.5);
     scene3d.partnerDecoGroup.add(pl);
     (list || []).forEach(def => {
-      if (def.t === 'drawing' && def.path) {
-        loadDrawingTexture(def.path).then(tex => {
-          def._tex = tex || null;
-          renderOne(def, scene3d.partnerDecoGroup, scene3d.partnerGroundY);
-        }).catch(() => renderOne(def, scene3d.partnerDecoGroup, scene3d.partnerGroundY));
+      // the partner isle is a dreamy miniature — shrink positions to fit its little dome
+      const pdef = Object.assign({}, def,
+        { x: +(def.x * 0.48).toFixed(2), z: +(def.z * 0.48).toFixed(2) });
+      if (pdef.t === 'drawing' && pdef.path) {
+        loadDrawingTexture(pdef.path).then(tex => {
+          pdef._tex = tex || null;
+          renderOne(pdef, scene3d.partnerDecoGroup, scene3d.partnerGroundY);
+        }).catch(() => renderOne(pdef, scene3d.partnerDecoGroup, scene3d.partnerGroundY));
       } else {
-        renderOne(def, scene3d.partnerDecoGroup, scene3d.partnerGroundY);
+        renderOne(pdef, scene3d.partnerDecoGroup, scene3d.partnerGroundY);
       }
     });
   }
@@ -1811,6 +1875,10 @@
     }
     const def = { id: newDecoId(), t: type,
                   x: +p.x.toFixed(2), z: +p.z.toFixed(2), r: 0 };
+    if (type === 'path') { // snap tiles to a 2-unit grid so they join into walkways
+      def.x = Math.round(p.x / 2) * 2;
+      def.z = Math.round(p.z / 2) * 2;
+    }
     if (type === 'flower') def.c = deco.flowerColor;
     if (type === 'tree') def.c = '#' + TREE_TINTS[deco.items.length % TREE_TINTS.length].toString(16).padStart(6, '0');
     if (type === 'car') def.c = CAR_COLORS[deco.items.length % CAR_COLORS.length];
@@ -1824,6 +1892,7 @@
     const def = deco.items.find(d => d.id === id);
     if (!def) return;
     def.x = +p.x.toFixed(2); def.z = +p.z.toFixed(2);
+    if (def.t === 'path') { def.x = Math.round(p.x / 2) * 2; def.z = Math.round(p.z / 2) * 2; }
     const mesh = findDecoMesh(id);
     if (mesh) {
       mesh.position.set(def.x, scene3d.groundY(def.x, def.z), def.z);
@@ -1873,7 +1942,7 @@
       if (!hitId) {
         const p = pickIsland(cx, cy);
         if (p) moveItem(deco.movingId, p);
-        else showToast('tap the grassy part of your island');
+        else showToast('tap your island — grass, plaza, or dry sand');
       }
       return;
     }
@@ -1881,7 +1950,7 @@
     if (deco.tool) {
       const p = pickIsland(cx, cy);
       if (p) addItem(deco.tool, p);
-      else showToast('tap the grassy part of your island');
+      else showToast('tap your island — grass, plaza, or dry sand');
       return;
     }
     selectItem(null);
