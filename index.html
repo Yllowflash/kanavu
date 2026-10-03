@@ -4,6 +4,15 @@
 <meta charset="UTF-8" />
 <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
 <title>Kanavu — Connecting Dreams</title>
+<meta name="description" content="A cozy little world for two, across any distance." />
+<meta name="theme-color" content="#0b1026" />
+<meta name="mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-capable" content="yes" />
+<meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+<meta name="apple-mobile-web-app-title" content="Kanavu" />
+<link rel="manifest" href="manifest.json" />
+<link rel="apple-touch-icon" href="icons/apple-touch-icon.png" />
+<link rel="icon" type="image/png" sizes="512x512" href="icons/icon-512.png" />
 <style>
   :root {
     --ink: #f4efff;
@@ -152,6 +161,72 @@
   #pair-pill.waiting { border-color: rgba(255, 217, 236, 0.6); color: var(--accent); }
   #pair-pill.connected { border-color: rgba(184, 240, 208, 0.6); color: #d9f5e4; }
   .hidden-el { display: none !important; }
+
+  /* ---------- decorating (Phase 3) ---------- */
+  #deco-bar {
+    z-index: 5; position: absolute; bottom: 0; width: 100%;
+    padding: 10px 12px calc(14px + env(safe-area-inset-bottom));
+    background: linear-gradient(180deg, rgba(18,14,44,0), rgba(18,14,44,0.88) 32%);
+    display: flex; flex-direction: column; gap: 10px;
+  }
+  #deco-chips { display: flex; gap: 8px; overflow-x: auto; padding: 2px 2px 6px;
+    -webkit-overflow-scrolling: touch; scrollbar-width: none; }
+  #deco-chips::-webkit-scrollbar { display: none; }
+  .chip {
+    flex: 0 0 auto; font-family: inherit; font-size: 13px; letter-spacing: 0.04em;
+    color: var(--ink); background: rgba(30,24,66,0.85);
+    border: 1px solid rgba(244,239,255,0.22); border-radius: 16px;
+    padding: 10px 14px; min-height: 44px; cursor: pointer; white-space: nowrap;
+    transition: border-color 0.2s, background 0.2s, transform 0.15s;
+  }
+  .chip.active { border-color: var(--glow); background: rgba(70,58,130,0.9);
+    box-shadow: 0 0 18px rgba(155,231,255,0.35); }
+  .chip:active { transform: scale(0.95); }
+  #deco-colors { display: flex; gap: 10px; justify-content: center; align-items: center; }
+  .dot { width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+    border: 2px solid rgba(255,255,255,0.25); transition: transform 0.15s, border-color 0.15s; }
+  .dot.active { border-color: #fff; transform: scale(1.15); }
+  #deco-done-row { display: flex; justify-content: center; }
+  #deco-popup {
+    z-index: 6; position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
+    display: flex; gap: 8px; align-items: center; max-width: calc(100% - 28px);
+    background: rgba(18,14,44,0.94); border: 1px solid rgba(255,217,236,0.35);
+    border-radius: 18px; padding: 10px 12px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  #deco-popup .lbl { font-size: 13px; font-style: italic; color: var(--ink-dim);
+    margin-right: 2px; max-width: 96px; overflow: hidden;
+    text-overflow: ellipsis; white-space: nowrap; }
+  .mini-btn {
+    font-family: inherit; font-size: 14px; color: var(--ink); cursor: pointer;
+    background: rgba(60,48,110,0.8); border: 1px solid rgba(244,239,255,0.25);
+    border-radius: 12px; padding: 10px 14px; min-height: 44px; white-space: nowrap;
+  }
+  .mini-btn:active { transform: scale(0.94); }
+  .mini-btn.danger { border-color: rgba(255,150,170,0.5); color: #ffc9d6; }
+
+  /* ---------- drawing overlay ---------- */
+  #draw-screen { position: fixed; inset: 0; z-index: 10;
+    background: rgba(10,8,28,0.96); display: flex; flex-direction: column;
+    align-items: center;
+    padding: calc(18px + env(safe-area-inset-top)) 16px calc(18px + env(safe-area-inset-bottom)); }
+  #draw-screen h2 { font-weight: 400; font-size: 22px; letter-spacing: 0.18em; margin-bottom: 4px; }
+  #draw-screen .sub { font-size: 13px; font-style: italic; color: var(--ink-dim); margin-bottom: 12px; }
+  #draw-canvas-wrap { flex: 1; width: min(560px, 100%); min-height: 200px; position: relative;
+    border: 1px solid rgba(155,231,255,0.35); border-radius: 18px; overflow: hidden;
+    background:
+      radial-gradient(circle at 50% 30%, rgba(90,70,150,0.35), rgba(20,16,48,0.1)),
+      repeating-conic-gradient(rgba(255,255,255,0.035) 0 25%, transparent 0 50%) 0 0 / 28px 28px;
+    touch-action: none; }
+  #draw-canvas { position: absolute; inset: 0; width: 100%; height: 100%;
+    touch-action: none; cursor: crosshair; }
+  #draw-tools { width: min(560px, 100%); margin-top: 12px;
+    display: flex; flex-direction: column; gap: 10px; }
+  #draw-colors { display: flex; gap: 10px; justify-content: center; flex-wrap: wrap; }
+  .draw-row { display: flex; gap: 8px; justify-content: center; flex-wrap: wrap; }
+  .size-btn.active { border-color: var(--glow); box-shadow: 0 0 14px rgba(155,231,255,0.4); }
+  #draw-msg { min-height: 20px; text-align: center; font-size: 13.5px; font-style: italic;
+              color: #ffb3c8; }
 </style>
 </head>
 <body>
@@ -234,14 +309,45 @@
     <button class="pill" id="back-btn">← Title</button>
   </div>
   <div class="hint">drag to look around</div>
-  <div class="hud-bottom">
-    <button class="pill" data-stub="Decorating your island — Phase 2">🏡 Decorate</button>
+  <div class="hud-bottom" id="hud-bottom">
+    <button class="pill" id="decorate-btn">🏡 Decorate</button>
     <button class="pill" data-stub="Time travel to your partner's island — Phase 2">✈ Travel</button>
     <button class="pill" data-stub="Gifts &amp; drawings — Phase 3">🎁 Gifts</button>
     <button class="pill" data-stub="Text &amp; voice chat — Phase 3">💬 Chat</button>
     <button class="pill" data-stub="Ludo · Carrom · Fishing &amp; more — Phase 4">🎲 Games</button>
   </div>
+  <div id="deco-bar" class="hidden-el">
+    <div id="deco-chips"></div>
+    <div id="deco-colors" class="hidden-el"></div>
+    <div id="deco-done-row"><button class="pill" id="deco-done">Done ✓</button></div>
+  </div>
+  <div id="deco-popup" class="hidden-el">
+    <span class="lbl" id="deco-popup-label">item</span>
+    <button class="mini-btn" id="deco-move">✥ Move</button>
+    <button class="mini-btn" id="deco-rotate">⟳ Turn</button>
+    <button class="mini-btn danger" id="deco-delete">🗑</button>
+  </div>
   <div class="toast" id="toast"></div>
+</div>
+
+<div id="draw-screen" class="hidden-el">
+  <h2>Draw</h2>
+  <div class="sub">finger-paint something for your island</div>
+  <div id="draw-canvas-wrap"><canvas id="draw-canvas"></canvas></div>
+  <div id="draw-tools">
+    <div id="draw-colors"></div>
+    <div class="draw-row">
+      <button class="mini-btn size-btn" data-size="4">· small</button>
+      <button class="mini-btn size-btn active" data-size="9">· medium</button>
+      <button class="mini-btn size-btn" data-size="16">· big</button>
+      <button class="mini-btn" id="draw-clear">clear</button>
+    </div>
+    <div class="draw-row">
+      <button class="mini-btn" id="draw-cancel">cancel</button>
+      <button class="pill" id="draw-save" style="min-height:44px;">hang it on the island ✨</button>
+    </div>
+    <div id="draw-msg"></div>
+  </div>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
@@ -333,6 +439,9 @@
 
     const camera = new THREE.PerspectiveCamera(50, W() / H(), 0.1, 400);
 
+    // per-frame hooks other modules can push into (decorating, etc.)
+    const tickers = [];
+
     // Soft dreamy lighting: cool ambient + warm moonlight + gentle fill
     scene.add(new THREE.AmbientLight(0x8f9bff, 0.55));
     const moonLight = new THREE.DirectionalLight(0xfff3d6, 1.05);
@@ -377,10 +486,15 @@
       rim.position.y = -0.7;
       const g = new THREE.Group();
       g.add(rim); g.add(m);
+      g.userData.dome = m;
       return g;
     }
     const island = makeIsland();
     scene.add(island);
+
+    // decoration layer for my island (Phase 3)
+    const decoGroup = new THREE.Group();
+    scene.add(decoGroup);
 
     // ---- tiny pond ----
     const pond = new THREE.Mesh(
@@ -485,6 +599,19 @@
     girlSpirit.lookAt(boySpirit.position.x, girlSpirit.position.y, boySpirit.position.z);
     scene.add(boySpirit, girlSpirit);
 
+    // ---- partner's isle: a smaller island dreaming in the distance (Phase 3) ----
+    // decorations are placed in LOCAL coords inside partnerDecoGroup
+    const partnerIsle = makeIsland();
+    partnerIsle.scale.setScalar(0.55);
+    partnerIsle.position.set(40, -0.6, -34);
+    scene.add(partnerIsle);
+    const partnerDecoGroup = new THREE.Group();
+    partnerIsle.add(partnerDecoGroup);
+    function partnerGroundY(x, z) { return islandTopY(x, z) - 0.3; }
+    const partnerLantern = lantern(-2.5, 3.5);
+    partnerLantern.position.set(-2.5, partnerGroundY(-2.5, 3.5), 3.5);
+    partnerDecoGroup.add(partnerLantern);
+
     // ---- moon ----
     const moon = new THREE.Mesh(
       new THREE.SphereGeometry(6, 24, 18),
@@ -540,13 +667,19 @@
       new THREE.PointsMaterial({ color: 0xffe9a8, size: 0.35, transparent: true, opacity: 0.9 }));
     scene.add(fireflies);
 
-    /* ----- simple orbit: slow auto-rotate + drag ----- */
+    /* ----- simple orbit: slow auto-rotate + drag (+ tap hook for decorating) ----- */
     let angle = 0.6, radius = 34, height = 16, dragging = false, lastX = 0, autoSpin = true;
+    let tapX = 0, tapY = 0, tapT = 0;
     const el = renderer.domElement;
     el.style.touchAction = 'none';
-    el.addEventListener('pointerdown', e => { dragging = true; autoSpin = false; lastX = e.clientX; el.setPointerCapture(e.pointerId); });
+    el.addEventListener('pointerdown', e => { dragging = true; autoSpin = false; lastX = e.clientX; el.setPointerCapture(e.pointerId); tapX = e.clientX; tapY = e.clientY; tapT = performance.now(); });
     el.addEventListener('pointermove', e => { if (dragging) { angle -= (e.clientX - lastX) * 0.008; lastX = e.clientX; } });
-    el.addEventListener('pointerup', () => { dragging = false; setTimeout(() => autoSpin = true, 4000); });
+    el.addEventListener('pointerup', e => {
+      dragging = false; setTimeout(() => autoSpin = true, 4000);
+      if (Math.hypot(e.clientX - tapX, e.clientY - tapY) < 10 && performance.now() - tapT < 450) {
+        if (scene3d && scene3d.onTap) scene3d.onTap(e.clientX, e.clientY);
+      }
+    });
     el.addEventListener('wheel', e => {
       radius = Math.min(60, Math.max(20, radius + e.deltaY * 0.03));
       height = Math.min(30, Math.max(9, height + e.deltaY * 0.012));
@@ -596,10 +729,14 @@
       }
       fp.needsUpdate = true;
 
+      for (const fn of tickers) { try { fn(t); } catch (e) {} }
+
       renderer.render(scene, camera);
     })();
 
-    scene3d = { renderer, scene };
+    scene3d = { renderer, scene, camera, groundY, tickers,
+                dome: island.userData.dome,
+                decoGroup, partnerDecoGroup, partnerGroundY, onTap: null };
   }
 
   /* ---------------- supabase backend: auth + pairing (Phase 2) ---------------- */
@@ -712,6 +849,7 @@
       updatePairPill();
       ensurePairPoller();
     }
+    initDeco();
   }
 
   async function afterAuth(user) {
@@ -894,9 +1032,751 @@
 
   document.getElementById('signout-link').addEventListener('click', async () => {
     stopPairPoll();
+    exitDeco();
+    resetDeco3D();
     try { await sb.auth.signOut(); } catch (e) {}
     appState.user = null; appState.profile = null; appState.pair = null; appState.offline = false;
     showScreen('title-screen');
+  });
+
+  /* ---------------- decorating: pre-made + hand-drawn (Phase 3) ---------------- */
+  const deco = {
+    active: false, tool: null, flowerColor: '#f2a7c3',
+    items: [], selectedId: null, movingId: null,
+    rowId: null, channel: null, inited: false, tickerOn: false, ringTickerOn: false,
+    saveTimer: null, ring: null, drawingAnims: [],
+  };
+  const hintEl = document.querySelector('#game-screen .hint');
+  const HINT_DEFAULT = 'drag to look around';
+
+  const DECO_DEFS = {
+    flower:    { label: 'Flowers',   emoji: '🌸' },
+    tree:      { label: 'Tree',      emoji: '🌲' },
+    garden:    { label: 'Garden',    emoji: '🌿' },
+    bookshop:  { label: 'Book shop', emoji: '📚' },
+    cafeteria: { label: 'Café',      emoji: '☕' },
+    car:       { label: 'Car',       emoji: '🚗' },
+    lantern:   { label: 'Lantern',   emoji: '🏮' },
+    pond:      { label: 'Pond',      emoji: '💧' },
+    fence:     { label: 'Fence',     emoji: '🪵' },
+    bench:     { label: 'Bench',     emoji: '🪑' },
+    draw:      { label: 'Draw',      emoji: '🎨' },
+  };
+  const FLOWER_COLORS = ['#f2a7c3', '#b9a7ff', '#ffd66e', '#fff6e8', '#ff9d8a'];
+  const TREE_TINTS = [0x7cc79a, 0x8fd6a4, 0x6fbf8f, 0xa8e0b8];
+  const CAR_COLORS = ['#9be7ff', '#f2a7c3', '#ffd66e', '#b9a7ff'];
+  const DRAW_COLORS = ['#ffd9ec', '#f2a7c3', '#b9a7ff', '#9be7ff', '#a8e0b8', '#ffd66e', '#ff9d8a', '#fff6e8'];
+
+  function decoMat(color) {
+    return new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1 });
+  }
+
+  /* ----- item builders (pastel flat, same language as the island) ----- */
+  function buildFlower(color) {
+    const g = new THREE.Group();
+    const stem = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 0.9, 6), decoMat(0x4f9e6a));
+    stem.position.y = 0.45;
+    const head = new THREE.Mesh(new THREE.IcosahedronGeometry(0.34, 0), decoMat(color));
+    head.position.y = 1.05;
+    const center = new THREE.Mesh(new THREE.SphereGeometry(0.13, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
+    center.position.set(0, 1.05, 0.3);
+    g.add(stem, head, center);
+    return g;
+  }
+  function buildTreeExtra(color) {
+    const g = new THREE.Group();
+    const trunk = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.32, 1.3, 7), decoMat(0x8a6a52));
+    trunk.position.y = 0.65;
+    const c1 = new THREE.Mesh(new THREE.ConeGeometry(1.35, 2.1, 8), decoMat(color));
+    c1.position.y = 2.1;
+    const c2 = new THREE.Mesh(new THREE.ConeGeometry(0.95, 1.5, 8), decoMat(color));
+    c2.position.y = 3.15;
+    g.add(trunk, c1, c2);
+    return g;
+  }
+  function buildGarden() {
+    const g = new THREE.Group();
+    const soil = new THREE.Mesh(new THREE.BoxGeometry(3.4, 0.35, 2.4), decoMat(0x7a5a44));
+    soil.position.y = 0.17;
+    g.add(soil);
+    for (let i = 0; i < 8; i++) {
+      const sprout = new THREE.Mesh(new THREE.ConeGeometry(0.16, 0.55, 6),
+        decoMat(i % 2 ? 0x7cc79a : 0xa8e0b8));
+      sprout.position.set(-1.2 + (i % 4) * 0.8, 0.62, i < 4 ? -0.55 : 0.55);
+      g.add(sprout);
+    }
+    return g;
+  }
+  function hut(bodyColor, roofColor, signColor) {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.6, 1.9, 2.2), decoMat(bodyColor));
+    body.position.y = 0.95;
+    const roof = new THREE.Mesh(new THREE.ConeGeometry(2.15, 1.3, 4), decoMat(roofColor));
+    roof.position.y = 2.55; roof.rotation.y = Math.PI / 4;
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.7, 1.2, 0.1), decoMat(0x4a3f66));
+    door.position.set(0, 0.6, 1.12);
+    const win = new THREE.Mesh(new THREE.BoxGeometry(0.8, 0.7, 0.08),
+      new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
+    win.position.set(-0.78, 1.1, 1.12);
+    const sign = new THREE.Mesh(new THREE.BoxGeometry(1.5, 0.5, 0.08),
+      new THREE.MeshBasicMaterial({ color: signColor }));
+    sign.position.set(0, 1.78, 1.14);
+    g.add(body, roof, door, win, sign);
+    return g;
+  }
+  function buildCar(color) {
+    const g = new THREE.Group();
+    const body = new THREE.Mesh(new THREE.BoxGeometry(2.4, 0.7, 1.3), decoMat(color));
+    body.position.y = 0.65;
+    const cab = new THREE.Mesh(new THREE.BoxGeometry(1.3, 0.6, 1.15), decoMat(0xdfe9ff));
+    cab.position.set(-0.1, 1.25, 0);
+    g.add(body, cab);
+    const wg = new THREE.CylinderGeometry(0.32, 0.32, 0.24, 10);
+    const wm = decoMat(0x3a3350);
+    [[-0.8, 0.65], [0.8, 0.65], [-0.8, -0.65], [0.8, -0.65]].forEach(([x, z]) => {
+      const w = new THREE.Mesh(wg, wm);
+      w.rotation.x = Math.PI / 2; w.position.set(x, 0.32, z);
+      g.add(w);
+    });
+    return g;
+  }
+  function buildLanternDeco() {
+    const g = new THREE.Group();
+    const post = new THREE.Mesh(new THREE.CylinderGeometry(0.1, 0.13, 1.6, 6), decoMat(0x4a3f66));
+    post.position.y = 0.8;
+    const orb = new THREE.Mesh(new THREE.SphereGeometry(0.5, 12, 10),
+      new THREE.MeshBasicMaterial({ color: 0xffd9ec }));
+    orb.position.y = 1.9;
+    const halo = new THREE.Mesh(new THREE.SphereGeometry(0.85, 12, 10),
+      new THREE.MeshBasicMaterial({ color: 0xffd9ec, transparent: true, opacity: 0.16 }));
+    halo.position.y = 1.9;
+    g.add(post, orb, halo);
+    return g;
+  }
+  function buildPondDeco() {
+    const g = new THREE.Group();
+    const p = new THREE.Mesh(new THREE.CircleGeometry(1.7, 20),
+      new THREE.MeshPhongMaterial({ color: 0x9be7ff, shininess: 120, specular: 0xffffff,
+                                    transparent: true, opacity: 0.9 }));
+    p.rotation.x = -Math.PI / 2; p.position.y = 0.06;
+    g.add(p);
+    return g;
+  }
+  function buildFence() {
+    const g = new THREE.Group();
+    const m = decoMat(0xa88464);
+    for (let i = 0; i < 5; i++) {
+      const post = new THREE.Mesh(new THREE.BoxGeometry(0.22, 1.1, 0.22), m);
+      post.position.set(i * 0.9 - 1.8, 0.55, 0);
+      g.add(post);
+    }
+    [0.45, 0.85].forEach(y => {
+      const rail = new THREE.Mesh(new THREE.BoxGeometry(4.0, 0.14, 0.14), m);
+      rail.position.set(0, y, 0);
+      g.add(rail);
+    });
+    return g;
+  }
+  function buildBench() {
+    const g = new THREE.Group();
+    const m = decoMat(0xb9836a);
+    const seat = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.16, 0.7), m);
+    seat.position.y = 0.62;
+    const back = new THREE.Mesh(new THREE.BoxGeometry(2.0, 0.7, 0.14), m);
+    back.position.set(0, 1.05, -0.32);
+    g.add(seat, back);
+    [-0.8, 0.8].forEach(x => {
+      const leg = new THREE.Mesh(new THREE.BoxGeometry(0.16, 0.62, 0.6), m);
+      leg.position.set(x, 0.31, 0);
+      g.add(leg);
+    });
+    return g;
+  }
+  function buildDrawingFrame(tex) {
+    const g = new THREE.Group();
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 1.6, 6), decoMat(0x4a3f66));
+    pole.position.y = 0.8;
+    const frame = new THREE.Mesh(new THREE.BoxGeometry(2.5, 1.9, 0.14), decoMat(0x6b5a8e));
+    frame.position.y = 2.4;
+    const art = new THREE.Mesh(new THREE.PlaneGeometry(2.2, 1.6),
+      tex ? new THREE.MeshBasicMaterial({ map: tex })
+          : new THREE.MeshBasicMaterial({ color: 0x2a2456 }));
+    art.position.set(0, 2.4, 0.09);
+    const glow = new THREE.Mesh(new THREE.SphereGeometry(1.7, 12, 10),
+      new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.10 }));
+    glow.position.y = 2.4;
+    g.add(pole, frame, art, glow);
+    return g;
+  }
+
+  function makeDecoMesh(def) {
+    switch (def.t) {
+      case 'flower':    return buildFlower(def.c || '#f2a7c3');
+      case 'tree':      return buildTreeExtra(def.c || '#7cc79a');
+      case 'garden':    return buildGarden();
+      case 'bookshop':  return hut(0xf6ead2, 0xb9836a, 0x9be7ff);
+      case 'cafeteria': {
+        const g = hut(0xf2d8e8, 0x8f6fb8, 0xffd66e);
+        const awn = new THREE.Mesh(new THREE.BoxGeometry(2.9, 0.12, 1.0), decoMat(0xff9d8a));
+        awn.position.set(0, 1.55, 1.55); awn.rotation.x = 0.25;
+        g.add(awn);
+        return g;
+      }
+      case 'car':       return buildCar(def.c || '#9be7ff');
+      case 'lantern':   return buildLanternDeco();
+      case 'pond':      return buildPondDeco();
+      case 'fence':     return buildFence();
+      case 'bench':     return buildBench();
+      case 'drawing':   return buildDrawingFrame(def._tex || null);
+      default:          return buildFlower('#f2a7c3');
+    }
+  }
+
+  /* ----- picking ----- */
+  let _ray = null;
+  function getRay() { if (!_ray) _ray = new THREE.Raycaster(); return _ray; }
+  function castAt(clientX, clientY) {
+    const el = scene3d.renderer.domElement;
+    const rect = el.getBoundingClientRect();
+    const nx = ((clientX - rect.left) / rect.width) * 2 - 1;
+    const ny = -((clientY - rect.top) / rect.height) * 2 + 1;
+    getRay().setFromCamera({ x: nx, y: ny }, scene3d.camera);
+    return getRay();
+  }
+  function pickIsland(clientX, clientY) {
+    const hits = castAt(clientX, clientY).intersectObject(scene3d.dome, false);
+    if (!hits.length) return null;
+    const p = hits[0].point;
+    if (Math.hypot(p.x, p.z) > 13.5) return null; // keep things on the grass
+    return p;
+  }
+  function pickDeco(clientX, clientY) {
+    const hits = castAt(clientX, clientY).intersectObjects(scene3d.decoGroup.children, true);
+    if (!hits.length) return null;
+    let o = hits[0].object;
+    while (o && !o.userData.decoId) o = o.parent;
+    return o ? o.userData.decoId : null;
+  }
+
+  /* ----- render ----- */
+  function clearGroup(group) {
+    for (let i = group.children.length - 1; i >= 0; i--) group.remove(group.children[i]);
+    deco.drawingAnims = deco.drawingAnims.filter(d => d.group !== group);
+  }
+  function renderOne(def, group, groundFn) {
+    const mesh = makeDecoMesh(def);
+    mesh.position.set(def.x, groundFn(def.x, def.z), def.z);
+    mesh.rotation.y = def.r || 0;
+    mesh.userData.decoId = def.id;
+    mesh.traverse(o => { o.userData.decoId = def.id; });
+    group.add(mesh);
+    if (def.t === 'drawing') {
+      mesh.userData.baseRot = def.r || 0;
+      deco.drawingAnims.push({ g: mesh, group, baseY: mesh.position.y, phase: Math.random() * 6.28 });
+    }
+    return mesh;
+  }
+  function renderMyDeco() {
+    if (!scene3d || scene3d.fallback) return;
+    clearGroup(scene3d.decoGroup);
+    deco.items.forEach(def => {
+      if (def.t === 'drawing' && def.path) {
+        loadDrawingTexture(def.path).then(tex => {
+          def._tex = tex || null;
+          renderOne(def, scene3d.decoGroup, scene3d.groundY);
+        }).catch(() => renderOne(def, scene3d.decoGroup, scene3d.groundY));
+      } else {
+        renderOne(def, scene3d.decoGroup, scene3d.groundY);
+      }
+    });
+  }
+  function renderPartnerDeco(list) {
+    if (!scene3d || scene3d.fallback) return;
+    clearGroup(scene3d.partnerDecoGroup);
+    // keep the dressing lantern (first child) — rebuild it
+    const pl = buildLanternDeco();
+    pl.position.set(-2.5, scene3d.partnerGroundY(-2.5, 3.5), 3.5);
+    scene3d.partnerDecoGroup.add(pl);
+    (list || []).forEach(def => {
+      if (def.t === 'drawing' && def.path) {
+        loadDrawingTexture(def.path).then(tex => {
+          def._tex = tex || null;
+          renderOne(def, scene3d.partnerDecoGroup, scene3d.partnerGroundY);
+        }).catch(() => renderOne(def, scene3d.partnerDecoGroup, scene3d.partnerGroundY));
+      } else {
+        renderOne(def, scene3d.partnerDecoGroup, scene3d.partnerGroundY);
+      }
+    });
+  }
+  function findDecoMesh(id) {
+    return scene3d.decoGroup.children.find(c => c.userData.decoId === id) || null;
+  }
+
+  /* ----- persistence (islands.decorations) ----- */
+  async function ensureIslandRow() {
+    const pairId = appState.pair.id, uid = appState.user.id;
+    const { data, error } = await sb.from('islands').select('*')
+      .eq('pair_id', pairId).eq('owner_id', uid).maybeSingle();
+    if (error) throw error;
+    if (data) return data;
+    const { data: ins, error: e2 } = await sb.from('islands')
+      .insert({ pair_id: pairId, owner_id: uid, decorations: [] })
+      .select().single();
+    if (e2) throw e2;
+    return ins;
+  }
+  function cleanDeco() {
+    return deco.items.map(d => { const { _tex, ...rest } = d; return rest; });
+  }
+  function scheduleSave() {
+    clearTimeout(deco.saveTimer);
+    deco.saveTimer = setTimeout(saveDecoNow, 800);
+  }
+  async function saveDecoNow() {
+    if (!sb || !appState.pair || !appState.user) return;
+    try {
+      await sb.from('islands').upsert({
+        pair_id: appState.pair.id,
+        owner_id: appState.user.id,
+        decorations: cleanDeco(),
+        updated_at: new Date().toISOString(),
+      }, { onConflict: 'pair_id,owner_id' });
+    } catch (e) { /* silent — retried on next change / exit */ }
+  }
+
+  /* ----- realtime: partner's island updates live ----- */
+  function subscribeIslands() {
+    if (deco.channel || !sb || !appState.pair) return;
+    const pairId = appState.pair.id;
+    deco.channel = sb.channel('kanavu-islands-' + pairId)
+      .on('postgres_changes',
+        { event: '*', schema: 'public', table: 'islands', filter: 'pair_id=eq.' + pairId },
+        (payload) => {
+          const row = payload.new;
+          if (!row || !Array.isArray(row.decorations)) return;
+          if (row.owner_id === appState.user.id) {
+            if (!deco.active) { deco.items = row.decorations; renderMyDeco(); }
+          } else {
+            renderPartnerDeco(row.decorations);
+          }
+        })
+      .subscribe();
+  }
+  async function loadPartnerDeco() {
+    if (!sb || !appState.pair || !appState.user) return;
+    const me = appState.user.id;
+    const partnerId = appState.pair.partner_a === me ? appState.pair.partner_b : appState.pair.partner_a;
+    if (!partnerId) return;
+    try {
+      const { data } = await sb.from('islands').select('decorations')
+        .eq('pair_id', appState.pair.id).eq('owner_id', partnerId).maybeSingle();
+      if (data) renderPartnerDeco(data.decorations);
+    } catch (e) { /* partner isle just stays quiet */ }
+  }
+
+  /* ----- selection ----- */
+  function labelFor(def) {
+    return (DECO_DEFS[def.t] && DECO_DEFS[def.t].label) || 'Drawing';
+  }
+  function ensureRing() {
+    if (deco.ring) return deco.ring;
+    const ring = new THREE.Mesh(
+      new THREE.RingGeometry(1.35, 1.7, 32),
+      new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.8,
+                                    side: THREE.DoubleSide }));
+    ring.rotation.x = -Math.PI / 2;
+    ring.visible = false;
+    scene3d.scene.add(ring);
+    deco.ring = ring;
+    if (!deco.ringTickerOn && scene3d.tickers) {
+      deco.ringTickerOn = true;
+      scene3d.tickers.push(t => {
+        if (deco.ring && deco.ring.visible) {
+          const s = 1 + Math.sin(t * 4) * 0.06;
+          deco.ring.scale.set(s, s, 1);
+        }
+      });
+    }
+    return ring;
+  }
+  function showRing(def) {
+    const ring = ensureRing();
+    ring.position.set(def.x, scene3d.groundY(def.x, def.z) + 0.15, def.z);
+    ring.visible = true;
+  }
+  function hideRing() { if (deco.ring) deco.ring.visible = false; }
+  function selectItem(id) {
+    deco.selectedId = id;
+    deco.movingId = null;
+    const pop = document.getElementById('deco-popup');
+    if (!id) {
+      pop.classList.add('hidden-el');
+      hideRing();
+      if (deco.active) hintEl.textContent = deco.tool ? 'tap your island to place it'
+                                                     : 'tap an item, then tap your island';
+      return;
+    }
+    const def = deco.items.find(d => d.id === id);
+    document.getElementById('deco-popup-label').textContent = def ? labelFor(def) : 'item';
+    pop.classList.remove('hidden-el');
+    if (def) showRing(def);
+    hintEl.textContent = 'move · turn · remove — or tap elsewhere';
+  }
+
+  /* ----- add / move / rotate / delete ----- */
+  function newDecoId() {
+    return 'd' + Date.now().toString(36) + Math.floor(Math.random() * 999);
+  }
+  function addItem(type, p) {
+    const def = { id: newDecoId(), t: type,
+                  x: +p.x.toFixed(2), z: +p.z.toFixed(2), r: 0 };
+    if (type === 'flower') def.c = deco.flowerColor;
+    if (type === 'tree') def.c = '#' + TREE_TINTS[deco.items.length % TREE_TINTS.length].toString(16).padStart(6, '0');
+    if (type === 'car') def.c = CAR_COLORS[deco.items.length % CAR_COLORS.length];
+    deco.items.push(def);
+    renderOne(def, scene3d.decoGroup, scene3d.groundY);
+    scheduleSave();
+  }
+  function moveItem(id, p) {
+    const def = deco.items.find(d => d.id === id);
+    if (!def) return;
+    def.x = +p.x.toFixed(2); def.z = +p.z.toFixed(2);
+    const mesh = findDecoMesh(id);
+    if (mesh) {
+      mesh.position.set(def.x, scene3d.groundY(def.x, def.z), def.z);
+      const anim = deco.drawingAnims.find(a => a.g === mesh);
+      if (anim) anim.baseY = mesh.position.y;
+    }
+    showRing(def);
+    deco.movingId = null;
+    hintEl.textContent = 'move · turn · remove — or tap elsewhere';
+    scheduleSave();
+  }
+
+  document.getElementById('deco-move').addEventListener('click', () => {
+    if (!deco.selectedId) return;
+    deco.movingId = deco.selectedId;
+    hintEl.textContent = 'tap the island to move it here';
+    showToast('tap where it should go');
+  });
+  document.getElementById('deco-rotate').addEventListener('click', () => {
+    const def = deco.items.find(d => d.id === deco.selectedId);
+    if (!def) return;
+    def.r = +((def.r || 0) + Math.PI / 4).toFixed(3);
+    const mesh = findDecoMesh(def.id);
+    if (mesh) { mesh.rotation.y = def.r; mesh.userData.baseRot = def.r; }
+    scheduleSave();
+  });
+  document.getElementById('deco-delete').addEventListener('click', () => {
+    const id = deco.selectedId;
+    if (!id) return;
+    const mesh = findDecoMesh(id);
+    if (mesh) scene3d.decoGroup.remove(mesh);
+    deco.drawingAnims = deco.drawingAnims.filter(a => a.g !== mesh);
+    deco.items = deco.items.filter(d => d.id !== id);
+    selectItem(null);
+    scheduleSave();
+    showToast('removed');
+  });
+
+  /* ----- tap routing in decorate mode ----- */
+  function onDecoTap(cx, cy) {
+    if (!deco.active || !scene3d || scene3d.fallback) return;
+    const hitId = pickDeco(cx, cy);
+    if (deco.movingId) {
+      if (hitId && hitId !== deco.movingId) { selectItem(hitId); return; }
+      if (!hitId) {
+        const p = pickIsland(cx, cy);
+        if (p) moveItem(deco.movingId, p);
+        else showToast('tap the grassy part of your island');
+      }
+      return;
+    }
+    if (hitId) { selectItem(hitId); return; }
+    if (deco.tool) {
+      const p = pickIsland(cx, cy);
+      if (p) addItem(deco.tool, p);
+      else showToast('tap the grassy part of your island');
+      return;
+    }
+    selectItem(null);
+  }
+
+  /* ----- palette ----- */
+  function buildPalette() {
+    const chips = document.getElementById('deco-chips');
+    if (chips.dataset.built) return;
+    chips.dataset.built = '1';
+    Object.entries(DECO_DEFS).forEach(([key, d]) => {
+      const b = document.createElement('button');
+      b.className = 'chip';
+      b.textContent = d.emoji + ' ' + d.label;
+      b.addEventListener('click', () => chooseTool(key, b));
+      chips.appendChild(b);
+    });
+    const colors = document.getElementById('deco-colors');
+    FLOWER_COLORS.forEach((c, i) => {
+      const dot = document.createElement('button');
+      dot.className = 'dot' + (i === 0 ? ' active' : '');
+      dot.style.background = c;
+      dot.setAttribute('aria-label', 'flower color');
+      dot.addEventListener('click', () => {
+        deco.flowerColor = c;
+        colors.querySelectorAll('.dot').forEach(x => x.classList.remove('active'));
+        dot.classList.add('active');
+      });
+      colors.appendChild(dot);
+    });
+  }
+  function chooseTool(key, btn) {
+    if (key === 'draw') { openDraw(); return; }
+    document.querySelectorAll('#deco-chips .chip').forEach(c => c.classList.remove('active'));
+    deco.tool = (deco.tool === key) ? null : key;
+    selectItem(null);
+    if (deco.tool) btn.classList.add('active');
+    document.getElementById('deco-colors').classList.toggle('hidden-el', deco.tool !== 'flower');
+    hintEl.textContent = deco.tool ? 'tap your island to place it · ' + DECO_DEFS[key].label
+                                   : 'tap an item, then tap your island';
+  }
+
+  /* ----- enter / exit / init ----- */
+  function enterDeco() {
+    if (appState.offline || !sb) { showToast('you are offline — connect to decorate'); return; }
+    if (!scene3d || scene3d.fallback) { showToast('the 3D island did not load'); return; }
+    if (!appState.pair) { showToast('pair up first, then decorate'); return; }
+    deco.active = true;
+    buildPalette();
+    document.getElementById('hud-bottom').classList.add('hidden-el');
+    document.getElementById('deco-bar').classList.remove('hidden-el');
+    scene3d.onTap = onDecoTap;
+    hintEl.textContent = 'tap an item, then tap your island';
+  }
+  function exitDeco() {
+    if (!deco.active) return;
+    deco.active = false;
+    deco.tool = null;
+    deco.movingId = null;
+    saveDecoNow();
+    selectItemSilent();
+    if (scene3d) scene3d.onTap = null;
+    document.getElementById('deco-bar').classList.add('hidden-el');
+    document.getElementById('hud-bottom').classList.remove('hidden-el');
+    if (hintEl) hintEl.textContent = HINT_DEFAULT;
+  }
+  function selectItemSilent() {
+    deco.selectedId = null;
+    document.getElementById('deco-popup').classList.add('hidden-el');
+    hideRing();
+  }
+  async function initDeco() {
+    if (appState.offline || !sb || !appState.pair || !appState.user) return;
+    if (!scene3d || scene3d.fallback) return;
+    if (!deco.tickerOn && scene3d.tickers) {
+      deco.tickerOn = true;
+      scene3d.tickers.push(t => {
+        for (const d of deco.drawingAnims) {
+          d.g.position.y = d.baseY + Math.sin(t * 1.2 + d.phase) * 0.22;
+          d.g.rotation.y = (d.g.userData.baseRot || 0) + Math.sin(t * 0.5 + d.phase) * 0.07;
+        }
+      });
+    }
+    if (deco.inited) return;
+    deco.inited = true;
+    try {
+      const row = await ensureIslandRow();
+      deco.rowId = row.id;
+      deco.items = Array.isArray(row.decorations) ? row.decorations : [];
+      renderMyDeco();
+      await loadPartnerDeco();
+      subscribeIslands();
+    } catch (e) {
+      deco.inited = false; // retry next time the island is entered
+    }
+  }
+  function resetDeco3D() {
+    if (scene3d && !scene3d.fallback) {
+      clearGroup(scene3d.decoGroup);
+      renderPartnerDeco([]); // back to just the dressing lantern
+    }
+    deco.items = [];
+    deco.inited = false;
+    deco.tickerOn = false;
+    if (deco.channel && sb) { try { sb.removeChannel(deco.channel); } catch (e) {} }
+    deco.channel = null;
+  }
+
+  document.getElementById('decorate-btn').addEventListener('click', enterDeco);
+  document.getElementById('deco-done').addEventListener('click', () => {
+    exitDeco();
+    showToast('island saved ✨');
+  });
+
+  /* ----- hand-drawn decorations ----- */
+  const draw = { color: DRAW_COLORS[0], size: 9, drawing: false, empty: true, last: null };
+  const drawCanvas = document.getElementById('draw-canvas');
+  const dctx = drawCanvas.getContext('2d');
+
+  function sizeDrawCanvas() {
+    const wrap = document.getElementById('draw-canvas-wrap');
+    const dpr = Math.min(window.devicePixelRatio || 1, 2);
+    drawCanvas.width = Math.max(50, Math.round(wrap.clientWidth * dpr));
+    drawCanvas.height = Math.max(50, Math.round(wrap.clientHeight * dpr));
+    dctx.lineCap = 'round';
+    dctx.lineJoin = 'round';
+  }
+  function drawPos(e) {
+    const r = drawCanvas.getBoundingClientRect();
+    return {
+      x: (e.clientX - r.left) * (drawCanvas.width / r.width),
+      y: (e.clientY - r.top) * (drawCanvas.height / r.height),
+    };
+  }
+  drawCanvas.addEventListener('pointerdown', e => {
+    e.preventDefault();
+    draw.drawing = true;
+    draw.empty = false;
+    try { drawCanvas.setPointerCapture(e.pointerId); } catch (err) {}
+    const p = drawPos(e);
+    dctx.strokeStyle = draw.color;
+    dctx.lineWidth = draw.size * (drawCanvas.width / drawCanvas.clientWidth);
+    dctx.beginPath();
+    dctx.moveTo(p.x, p.y);
+    draw.last = p;
+  });
+  drawCanvas.addEventListener('pointermove', e => {
+    if (!draw.drawing) return;
+    e.preventDefault();
+    const p = drawPos(e);
+    dctx.beginPath();
+    dctx.moveTo(draw.last.x, draw.last.y);
+    dctx.lineTo(p.x, p.y);
+    dctx.stroke();
+    draw.last = p;
+  });
+  const endStroke = () => { draw.drawing = false; };
+  drawCanvas.addEventListener('pointerup', endStroke);
+  drawCanvas.addEventListener('pointercancel', endStroke);
+
+  function buildDrawTools() {
+    const wrap = document.getElementById('draw-colors');
+    if (wrap.dataset.built) return;
+    wrap.dataset.built = '1';
+    DRAW_COLORS.forEach((c, i) => {
+      const dot = document.createElement('button');
+      dot.className = 'dot' + (i === 0 ? ' active' : '');
+      dot.style.background = c;
+      dot.setAttribute('aria-label', 'brush color');
+      dot.addEventListener('click', () => {
+        draw.color = c;
+        wrap.querySelectorAll('.dot').forEach(x => x.classList.remove('active'));
+        dot.classList.add('active');
+      });
+      wrap.appendChild(dot);
+    });
+    document.querySelectorAll('#draw-screen .size-btn').forEach(b => {
+      b.addEventListener('click', () => {
+        draw.size = +b.dataset.size;
+        document.querySelectorAll('#draw-screen .size-btn').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+      });
+    });
+  }
+  function openDraw() {
+    if (appState.offline || !sb || !appState.pair) {
+      showToast('connect to save drawings');
+      return;
+    }
+    buildDrawTools();
+    document.getElementById('draw-msg').textContent = '';
+    document.getElementById('draw-screen').classList.remove('hidden-el');
+    sizeDrawCanvas();
+  }
+  function closeDraw() {
+    document.getElementById('draw-screen').classList.add('hidden-el');
+  }
+  document.getElementById('draw-clear').addEventListener('click', () => {
+    dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+    draw.empty = true;
+  });
+  document.getElementById('draw-cancel').addEventListener('click', closeDraw);
+
+  // Free-tier guard: JPEG (not PNG), longest side max 768px, quality 0.8.
+  // If the result is still over 400KB, downscale further until it fits.
+  function renderJPEG(src, scale) {
+    return new Promise(resolve => {
+      const out = document.createElement('canvas');
+      out.width = Math.max(1, Math.round(src.width * scale));
+      out.height = Math.max(1, Math.round(src.height * scale));
+      const ctx = out.getContext('2d');
+      ctx.fillStyle = '#17123a'; // deep indigo night card (JPEG has no alpha)
+      ctx.fillRect(0, 0, out.width, out.height);
+      ctx.drawImage(src, 0, 0, out.width, out.height);
+      out.toBlob(b => resolve(b), 'image/jpeg', 0.8);
+    });
+  }
+  async function encodeDrawingJPEG(src) {
+    let scale = Math.min(1, 768 / Math.max(src.width, src.height));
+    let blob = await renderJPEG(src, scale);
+    let guard = 0;
+    while (blob && blob.size > 400 * 1024 && guard < 4) {
+      scale *= 0.7;
+      blob = await renderJPEG(src, scale);
+      guard++;
+    }
+    return blob;
+  }
+  function freeSpot() {
+    for (let r = 3; r < 12; r += 2) {
+      for (let a = 0; a < 6.28; a += 0.55) {
+        const x = Math.cos(a) * r, z = Math.sin(a) * r;
+        const clash = deco.items.some(d => Math.hypot(d.x - x, d.z - z) < 2.4);
+        if (!clash) return { x: +x.toFixed(2), z: +z.toFixed(2) };
+      }
+    }
+    return { x: 0, z: -6 };
+  }
+  async function loadDrawingTexture(path) {
+    const { data, error } = await sb.storage.from('drawings').createSignedUrl(path, 604800);
+    if (error || !data || !data.signedUrl) throw new Error('signed url failed');
+    const tex = await new THREE.TextureLoader().loadAsync(data.signedUrl);
+    tex.colorSpace = THREE.SRGBColorSpace;
+    return tex;
+  }
+  async function addDrawing(path) {
+    const spot = freeSpot();
+    const def = { id: newDecoId(), t: 'drawing', x: spot.x, z: spot.z, r: 0.4, path };
+    try { def._tex = await loadDrawingTexture(path); }
+    catch (e) { def._tex = null; }
+    deco.items.push(def);
+    renderOne(def, scene3d.decoGroup, scene3d.groundY);
+    scheduleSave();
+  }
+  document.getElementById('draw-save').addEventListener('click', async () => {
+    const msgEl = document.getElementById('draw-msg');
+    msgEl.textContent = '';
+    if (draw.empty) { msgEl.textContent = 'draw something first ✨'; return; }
+    const btn = document.getElementById('draw-save');
+    btn.disabled = true;
+    try {
+      msgEl.textContent = 'hanging it up…';
+      const blob = await encodeDrawingJPEG(drawCanvas);
+      if (!blob) throw new Error('encode failed');
+      const path = appState.pair.id + '/' + Date.now() + '.jpg';
+      const { error } = await sb.storage.from('drawings')
+        .upload(path, blob, { contentType: 'image/jpeg', upsert: false });
+      if (error) throw error;
+      closeDraw();
+      msgEl.textContent = '';
+      dctx.clearRect(0, 0, drawCanvas.width, drawCanvas.height);
+      draw.empty = true;
+      await addDrawing(path);
+      showToast('hung on your island ✨');
+    } catch (e) {
+      msgEl.textContent = 'could not save — check connection & try again';
+    } finally {
+      btn.disabled = false;
+    }
   });
 
   /* ---------------- wire up screens ---------------- */
@@ -921,6 +1801,7 @@
     }
   });
   document.getElementById('back-btn').addEventListener('click', () => {
+    if (typeof exitDeco === 'function') exitDeco();
     showScreen('title-screen');
   });
 })();
