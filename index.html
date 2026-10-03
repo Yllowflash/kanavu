@@ -118,6 +118,22 @@
           font-size: 12px; letter-spacing: 0.28em; color: rgba(244,239,255,0.45); font-style: italic;
           pointer-events: none; }
 
+  /* ---------- virtual joystick (movement phase) ---------- */
+  #joy-zone { z-index: 2; position: absolute; left: 0; bottom: 0; width: 42%; height: 36%;
+              touch-action: none; }
+  #joy-base { position: absolute; left: 30px; bottom: 92px; width: 112px; height: 112px;
+              border-radius: 50%; background: rgba(20,16,48,0.35);
+              border: 1px solid rgba(244,239,255,0.30);
+              backdrop-filter: blur(4px); -webkit-backdrop-filter: blur(4px);
+              transition: opacity 0.3s ease; }
+  #joy-base.idle { opacity: 0.45; animation: joyPulse 2.6s ease-in-out infinite; }
+  @keyframes joyPulse { 0%,100% { transform: scale(1); } 50% { transform: scale(1.06); } }
+  #joy-zone.active #joy-base { opacity: 1; animation: none; }
+  #joy-knob { position: absolute; left: 50%; top: 50%; width: 52px; height: 52px; border-radius: 50%;
+              background: rgba(155,231,255,0.55); border: 1px solid rgba(255,255,255,0.55);
+              transform: translate(-50%,-50%); box-shadow: 0 0 18px rgba(155,231,255,0.5); }
+  @media (hover: hover) and (pointer: fine) { #joy-zone { display: none; } }
+
   /* ---------- auth / profile / pairing screens (Phase 2) ---------- */
   .card {
     z-index: 3; width: min(420px, calc(100% - 48px));
@@ -204,6 +220,31 @@
   }
   .mini-btn:active { transform: scale(0.94); }
   .mini-btn.danger { border-color: rgba(255,150,170,0.5); color: #ffc9d6; }
+
+  /* ---------- home customizer ---------- */
+  #home-panel {
+    z-index: 6; position: absolute; bottom: 150px; left: 50%; transform: translateX(-50%);
+    width: min(360px, calc(100% - 32px));
+    background: rgba(18,14,44,0.96); border: 1px solid rgba(255,217,236,0.35);
+    border-radius: 20px; padding: 18px;
+    box-shadow: 0 8px 30px rgba(0,0,0,0.5);
+  }
+  #home-panel h3 { font-weight: 400; font-size: 18px; letter-spacing: 0.14em; margin-bottom: 12px;
+    text-align: center; }
+  .hp-row { display: flex; align-items: center; gap: 10px; margin-bottom: 10px; }
+  .hp-lbl { font-size: 11px; letter-spacing: 0.18em; text-transform: uppercase;
+    color: var(--ink-dim); width: 76px; flex-shrink: 0; }
+  .hp-chips { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hp-chip { font-family: inherit; font-size: 13px; color: var(--ink); cursor: pointer;
+    background: rgba(60,48,110,0.8); border: 1px solid rgba(244,239,255,0.25);
+    border-radius: 999px; padding: 9px 14px; min-height: 40px; }
+  .hp-chip.active { border-color: var(--glow); box-shadow: 0 0 12px rgba(155,231,255,0.35); }
+  .hp-swatches { display: flex; gap: 8px; flex-wrap: wrap; }
+  .hp-dot { width: 34px; height: 34px; border-radius: 50%; cursor: pointer;
+    border: 2px solid transparent; }
+  .hp-dot.active { border-color: #fff; box-shadow: 0 0 10px rgba(255,255,255,0.4); }
+  .hp-row.btns { justify-content: space-between; margin: 14px 0 0; }
+  #home-place { min-height: 44px; }
 
   /* ---------- drawing overlay ---------- */
   #draw-screen { position: fixed; inset: 0; z-index: 10;
@@ -308,7 +349,8 @@
     <div class="pill static hidden-el" id="pair-pill">…</div>
     <button class="pill" id="back-btn">← Title</button>
   </div>
-  <div class="hint">drag to look around</div>
+  <div class="hint">left stick to walk · drag to look</div>
+  <div id="joy-zone"><div id="joy-base" class="idle"><div id="joy-knob"></div></div></div>
   <div class="hud-bottom" id="hud-bottom">
     <button class="pill" id="decorate-btn">🏡 Decorate</button>
     <button class="pill" data-stub="Time travel to your partner's island — Phase 2">✈ Travel</button>
@@ -326,6 +368,18 @@
     <button class="mini-btn" id="deco-move">✥ Move</button>
     <button class="mini-btn" id="deco-rotate">⟳ Turn</button>
     <button class="mini-btn danger" id="deco-delete">🗑</button>
+  </div>
+  <div id="home-panel" class="hidden-el">
+    <h3>Your home</h3>
+    <div class="hp-row"><span class="hp-lbl">Walls</span><div id="hp-wallmat" class="hp-chips"></div></div>
+    <div class="hp-row"><span class="hp-lbl">Wall color</span><div id="hp-wallcolor" class="hp-swatches"></div></div>
+    <div class="hp-row"><span class="hp-lbl">Roof</span><div id="hp-roofstyle" class="hp-chips"></div></div>
+    <div class="hp-row"><span class="hp-lbl">Roof color</span><div id="hp-roofcolor" class="hp-swatches"></div></div>
+    <div class="hp-row"><span class="hp-lbl">Door</span><div id="hp-doorcolor" class="hp-swatches"></div></div>
+    <div class="hp-row btns">
+      <button class="mini-btn" id="home-cancel">cancel</button>
+      <button class="pill" id="home-place">Place ✓</button>
+    </div>
   </div>
   <div class="toast" id="toast"></div>
 </div>
@@ -435,7 +489,7 @@
     wrap.appendChild(renderer.domElement);
 
     const scene = new THREE.Scene();
-    scene.fog = new THREE.FogExp2(0x1b1b4d, 0.016);
+    scene.fog = new THREE.FogExp2(0x1b1b4d, 0.011);
 
     const camera = new THREE.PerspectiveCamera(50, W() / H(), 0.1, 400);
 
@@ -464,32 +518,80 @@
     ocean.position.y = -0.4;
     scene.add(ocean);
 
-    // ---- island: soft rounded mound, pastel ----
-    function makeIsland() {
+    // ---- island: big dreamy isle — sandy beach ring, grassy hill, village plaza ----
+    const ISLAND_R = 27, SQUASH = 0.42, SINK = 0.18;
+    const PLAZA = { x: 0, z: 0, r: 10, blend: 5, y: 9.2 };
+    const WALK_R = 28.5;
+    function sstep(a, b, x) {
+      const t = Math.min(1, Math.max(0, (x - a) / (b - a)));
+      return t * t * (3 - 2 * t);
+    }
+    // single source of truth for the main island surface (mesh + placement + walking)
+    function terrainY(x, z) {
+      const r = Math.hypot(x, z);
+      let y = r < ISLAND_R ? Math.sqrt(ISLAND_R * ISLAND_R - r * r) * SQUASH : 0;
+      if (r >= ISLAND_R) y = -1.0 * sstep(ISLAND_R, 34, r); // beach dips gently under the waves
+      const lump = 1 + 0.10 * Math.sin(x * 0.55) * Math.cos(z * 0.5)
+                     + 0.06 * Math.sin(x * 1.3 + z * 0.9);
+      const pd = Math.hypot(x - PLAZA.x, z - PLAZA.z);
+      const f = 1 - sstep(PLAZA.r, PLAZA.r + PLAZA.blend, pd); // 1 on the flat plaza
+      if (r < ISLAND_R) y *= (1 + (lump - 1) * (1 - f)); // organic lumps on grass, never on the plaza
+      y = y + (PLAZA.y - y) * f;
+      return y;
+    }
+    // placement height: sunk slightly so props never float above the mesh
+    function groundY(x, z) { return terrainY(x, z) - SINK; }
+    function makeIslandTop() {
+      const geo = new THREE.PlaneGeometry(76, 76, 76, 76);
+      geo.rotateX(-Math.PI / 2);
+      const pos = geo.attributes.position;
+      const colors = new Float32Array(pos.count * 3);
+      const cGrass = new THREE.Color(0x9fd8a8), cPlaza = new THREE.Color(0xe6d2a0),
+            cSand = new THREE.Color(0xf2e3c2), tmpC = new THREE.Color();
+      for (let i = 0; i < pos.count; i++) {
+        const x = pos.getX(i), z = pos.getZ(i);
+        const r = Math.hypot(x, z);
+        pos.setY(i, r < 34.5 ? terrainY(x, z) : -2.5);
+        const pd = Math.hypot(x - PLAZA.x, z - PLAZA.z);
+        const fPlaza = 1 - sstep(PLAZA.r, PLAZA.r + PLAZA.blend, pd);
+        const fBeach = sstep(24, 28.5, r);
+        tmpC.copy(cGrass).lerp(cPlaza, fPlaza).lerp(cSand, fBeach);
+        colors[i * 3] = tmpC.r; colors[i * 3 + 1] = tmpC.g; colors[i * 3 + 2] = tmpC.b;
+      }
+      geo.setAttribute('color', new THREE.BufferAttribute(colors, 3));
+      geo.computeVertexNormals();
+      return new THREE.Mesh(geo,
+        new THREE.MeshStandardMaterial({ vertexColors: true, flatShading: true, roughness: 1 }));
+    }
+    // partner's isle stays small: the original little dome
+    function makeSmallIsle() {
       const geo = new THREE.SphereGeometry(16, 40, 28, 0, Math.PI * 2, 0, Math.PI / 2);
       const pos = geo.attributes.position;
       for (let i = 0; i < pos.count; i++) {
         const x = pos.getX(i), y = pos.getY(i), z = pos.getZ(i);
-        // gentle organic lumps
         const lump = 1 + 0.10 * Math.sin(x * 0.55) * Math.cos(z * 0.5)
                        + 0.06 * Math.sin(x * 1.3 + z * 0.9);
         pos.setXYZ(i, x * lump, y * 0.42 * lump, z * lump);
       }
       geo.computeVertexNormals();
-      const mat = new THREE.MeshStandardMaterial({ color: 0x9fd8a8, flatShading: true, roughness: 1 });
-      const m = new THREE.Mesh(geo, mat);
-      // sandy rim: a slightly larger, flatter disc underneath
-      const rim = new THREE.Mesh(
-        new THREE.CylinderGeometry(17.2, 18.6, 1.6, 40),
-        new THREE.MeshStandardMaterial({ color: 0xf2e3c2, flatShading: true, roughness: 1 })
-      );
-      rim.position.y = -0.7;
-      const g = new THREE.Group();
-      g.add(rim); g.add(m);
-      g.userData.dome = m;
-      return g;
+      return new THREE.Mesh(geo,
+        new THREE.MeshStandardMaterial({ color: 0x9fd8a8, flatShading: true, roughness: 1 }));
     }
-    const island = makeIsland();
+    function smallIsleY(x, z) {
+      const r = Math.hypot(x, z);
+      return r >= 16 ? 0 : Math.sqrt(256 - r * r) * 0.42;
+    }
+    const island = new THREE.Group();
+    island.add(makeIslandTop());
+    // sandy skirt hiding the island's edge from the side
+    const skirt = new THREE.Mesh(
+      new THREE.CylinderGeometry(34.6, 36.5, 3.4, 48, 1, true),
+      new THREE.MeshStandardMaterial({ color: 0xe8d5ae, flatShading: true, roughness: 1,
+                                        side: THREE.DoubleSide })
+    );
+    skirt.position.y = -1.4;
+    island.add(skirt);
+    island.userData.dome = island.children[0];
     scene.add(island);
 
     // decoration layer for my island (Phase 3)
@@ -503,7 +605,7 @@
                                     transparent: true, opacity: 0.9 })
     );
     pond.rotation.x = -Math.PI / 2;
-    pond.position.set(5.5, groundY(5.5, 3.5), 3.5);
+    pond.position.set(-15, groundY(-15, 9), 9);
     scene.add(pond);
 
     // ---- pastel low-poly trees ----
@@ -529,17 +631,9 @@
       g.rotation.y = Math.random() * Math.PI * 2;
       return g;
     }
-    // approx island surface height at (x,z): dome of radius 16 squashed 0.42
-    function islandTopY(x, z) {
-      const r = Math.sqrt(x * x + z * z);
-      if (r >= 16) return 0;
-      return Math.sqrt(16 * 16 - r * r) * 0.42;
-    }
-    // placement height: sunk slightly so props never float above the lumpy dome
-    function groundY(x, z) { return islandTopY(x, z) - 0.3; }
     const treeTints = [0x7cc79a, 0x8fd6a4, 0x6fbf8f, 0xa8e0b8];
-    [[-7, -4, 1.2], [-3.5, -7.5, 0.9], [7.5, -5.5, 1.05], [-8.5, 4.5, 1.0],
-     [2.5, 7.8, 0.85], [9.5, 4.0, 1.15], [-1.5, 1.5, 1.3]].forEach(([x, z, s], i) => {
+    [[-18, -8, 1.2], [-22, 4, 1.0], [-14, 14, 1.1], [14, -16, 1.05],
+     [22, -6, 1.15], [16, 12, 0.95], [24, 8, 1.0], [-4, -20, 1.1]].forEach(([x, z, s], i) => {
       scene.add(tree(x, z, s, treeTints[i % treeTints.length]));
     });
 
@@ -565,8 +659,19 @@
       g.position.set(x, groundY(x, z), z);
       return g;
     }
-    scene.add(lantern(-4.5, 2.0));
-    scene.add(lantern(3.8, -2.2));
+    scene.add(lantern(-12, -12));
+    scene.add(lantern(14, 16));
+    scene.add(lantern(-20, -14));
+    scene.add(lantern(20, 4));
+
+    // village plaza: faint stone plot markers where homes and shops can go
+    const plotMat = new THREE.MeshStandardMaterial({ color: 0xd9c08a, roughness: 1 });
+    [[-5, -4], [0, -6], [5, -4], [-5, 4], [0, 6], [5, 4]].forEach(([x, z]) => {
+      const disc = new THREE.Mesh(new THREE.CircleGeometry(2.2, 24), plotMat);
+      disc.rotation.x = -Math.PI / 2;
+      disc.position.set(x, PLAZA.y - SINK + 0.04, z);
+      scene.add(disc);
+    });
 
     // ---- two little spirit placeholders (boy: teal cape, girl: rose cape) ----
     function spirit(capeColor, x, z, phase) {
@@ -595,19 +700,102 @@
     }
     const boySpirit = spirit(0x5fc6c9, -1.8, 0.6, 0);
     const girlSpirit = spirit(0xf2a7c3, 1.6, 0.9, Math.PI);
-    boySpirit.lookAt(girlSpirit.position.x, boySpirit.position.y, girlSpirit.position.z);
-    girlSpirit.lookAt(boySpirit.position.x, girlSpirit.position.y, boySpirit.position.z);
     scene.add(boySpirit, girlSpirit);
+
+    /* ----- the player: Adi walks the boy spirit (girl returns in travel phase) ----- */
+    girlSpirit.visible = false;
+    const player = {
+      mesh: boySpirit,
+      x: 0, z: 1, vx: 0, vz: 0,
+      heading: Math.PI, // facing the village plots
+      walkPhase: 0, speed: 0,
+    };
+    boySpirit.position.set(player.x, groundY(player.x, player.z), player.z);
+    boySpirit.rotation.y = player.heading;
+    // soft contact shadow so the spirit sits on the grass
+    const shadowBlob = new THREE.Mesh(
+      new THREE.CircleGeometry(0.85, 20),
+      new THREE.MeshBasicMaterial({ color: 0x1c2b4a, transparent: true, opacity: 0.28 })
+    );
+    shadowBlob.rotation.x = -Math.PI / 2;
+    shadowBlob.position.set(player.x, groundY(player.x, player.z) + 0.06, player.z);
+    scene.add(shadowBlob);
+
+    // static colliders: trees, lanterns, pond (deco colliders arrive via scene3d.decoColliders)
+    const staticColliders = [[-18, -8, 1.2], [-22, 4, 1.0], [-14, 14, 1.1], [14, -16, 1.05],
+      [22, -6, 1.15], [16, 12, 0.95], [24, 8, 1.0], [-4, -20, 1.1]]
+      .map(([x, z, s]) => ({ x, z, r: 1.55 * s }));
+    staticColliders.push({ x: -12, z: -12, r: 0.55 }, { x: 14, z: 16, r: 0.55 },
+                         { x: -20, z: -14, r: 0.55 }, { x: 20, z: 4, r: 0.55 });
+    staticColliders.push({ x: -15, z: 9, r: 2.7 });
+
+    /* ----- input: virtual joystick (touch) + WASD/arrows (desktop) ----- */
+    const input = { jx: 0, jy: 0, kx: 0, ky: 0 }; // y-up = forward
+    const keys = {};
+    function updateKeys() {
+      input.kx = ((keys.KeyD || keys.ArrowRight) ? 1 : 0) - ((keys.KeyA || keys.ArrowLeft) ? 1 : 0);
+      input.ky = ((keys.KeyW || keys.ArrowUp) ? 1 : 0) - ((keys.KeyS || keys.ArrowDown) ? 1 : 0);
+    }
+    addEventListener('keydown', e => {
+      const tag = (document.activeElement && document.activeElement.tagName) || '';
+      if (tag === 'INPUT' || tag === 'TEXTAREA') return;
+      keys[e.code] = true; updateKeys();
+      if (['ArrowUp', 'ArrowDown', 'ArrowLeft', 'ArrowRight', 'Space'].includes(e.code)) e.preventDefault();
+    });
+    addEventListener('keyup', e => { keys[e.code] = false; updateKeys(); });
+    addEventListener('blur', () => { for (const k in keys) keys[k] = false; updateKeys(); });
+
+    const joyZone = document.getElementById('joy-zone');
+    const joyBase = document.getElementById('joy-base');
+    const joyKnob = document.getElementById('joy-knob');
+    const JOY_R = 48; // max knob travel, px
+    let joyId = null, joyOX = 0, joyOY = 0;
+    function joySetKnob(dx, dy) {
+      const len = Math.hypot(dx, dy), cl = len > JOY_R ? JOY_R / len : 1;
+      const cx = dx * cl, cy = dy * cl;
+      joyKnob.style.transform = 'translate(calc(-50% + ' + cx.toFixed(1) + 'px), calc(-50% + ' + cy.toFixed(1) + 'px))';
+      input.jx = cx / JOY_R; input.jy = -cy / JOY_R; // push up = forward
+    }
+    joyZone.addEventListener('pointerdown', e => {
+      if (joyId !== null || !scene3d || scene3d.fallback || scene3d.decoMode) return;
+      joyId = e.pointerId;
+      try { joyZone.setPointerCapture(joyId); } catch (err) {}
+      const zr = joyZone.getBoundingClientRect();
+      joyOX = e.clientX; joyOY = e.clientY;
+      joyBase.style.left = (e.clientX - zr.left - 56) + 'px';
+      joyBase.style.top = (e.clientY - zr.top - 56) + 'px';
+      joyBase.style.bottom = 'auto';
+      joyBase.classList.remove('idle');
+      joyZone.classList.add('active');
+      joySetKnob(0, 0);
+      e.preventDefault(); e.stopPropagation();
+    });
+    joyZone.addEventListener('pointermove', e => {
+      if (e.pointerId !== joyId) return;
+      joySetKnob(e.clientX - joyOX, e.clientY - joyOY);
+      e.preventDefault();
+    });
+    function joyEnd(e) {
+      if (e.pointerId !== joyId) return;
+      joyId = null; input.jx = 0; input.jy = 0;
+      joyKnob.style.transform = 'translate(-50%,-50%)';
+      joyZone.classList.remove('active');
+      joyBase.classList.add('idle');
+      joyBase.style.left = ''; joyBase.style.top = ''; joyBase.style.bottom = '';
+    }
+    joyZone.addEventListener('pointerup', joyEnd);
+    joyZone.addEventListener('pointercancel', joyEnd);
 
     // ---- partner's isle: a smaller island dreaming in the distance (Phase 3) ----
     // decorations are placed in LOCAL coords inside partnerDecoGroup
-    const partnerIsle = makeIsland();
+    const partnerIsle = new THREE.Group();
+    partnerIsle.add(makeSmallIsle());
     partnerIsle.scale.setScalar(0.55);
-    partnerIsle.position.set(40, -0.6, -34);
+    partnerIsle.position.set(46, -0.6, -38);
     scene.add(partnerIsle);
     const partnerDecoGroup = new THREE.Group();
     partnerIsle.add(partnerDecoGroup);
-    function partnerGroundY(x, z) { return islandTopY(x, z) - 0.3; }
+    function partnerGroundY(x, z) { return smallIsleY(x, z) - SINK; }
     const partnerLantern = lantern(-2.5, 3.5);
     partnerLantern.position.set(-2.5, partnerGroundY(-2.5, 3.5), 3.5);
     partnerDecoGroup.add(partnerLantern);
@@ -667,22 +855,28 @@
       new THREE.PointsMaterial({ color: 0xffe9a8, size: 0.35, transparent: true, opacity: 0.9 }));
     scene.add(fireflies);
 
-    /* ----- simple orbit: slow auto-rotate + drag (+ tap hook for decorating) ----- */
-    let angle = 0.6, radius = 34, height = 16, dragging = false, lastX = 0, autoSpin = true;
+    /* ----- camera: damped follow while walking, slow orbit when idle ----- */
+    let angle = 0.6, radius = 40, height = 18, dragging = false, lastX = 0;
+    let zoomAdj = 0;                    // user wheel-zoom offset
+    let camMode = 'orbit';              // 'orbit' | 'follow'
+    let lastMoveT = -10, lastT = 0;
+    const lookTarget = new THREE.Vector3(player.x, groundY(player.x, player.z) + 1.6, player.z);
+    const desiredLook = new THREE.Vector3();
+    // scratch vectors — reused every frame, never allocated in the loop
+    const tmpFwd = new THREE.Vector3(), tmpRight = new THREE.Vector3(), tmpMove = new THREE.Vector3();
     let tapX = 0, tapY = 0, tapT = 0;
     const el = renderer.domElement;
     el.style.touchAction = 'none';
-    el.addEventListener('pointerdown', e => { dragging = true; autoSpin = false; lastX = e.clientX; el.setPointerCapture(e.pointerId); tapX = e.clientX; tapY = e.clientY; tapT = performance.now(); });
+    el.addEventListener('pointerdown', e => { dragging = true; lastX = e.clientX; el.setPointerCapture(e.pointerId); tapX = e.clientX; tapY = e.clientY; tapT = performance.now(); });
     el.addEventListener('pointermove', e => { if (dragging) { angle -= (e.clientX - lastX) * 0.008; lastX = e.clientX; } });
     el.addEventListener('pointerup', e => {
-      dragging = false; setTimeout(() => autoSpin = true, 4000);
+      dragging = false;
       if (Math.hypot(e.clientX - tapX, e.clientY - tapY) < 10 && performance.now() - tapT < 450) {
         if (scene3d && scene3d.onTap) scene3d.onTap(e.clientX, e.clientY);
       }
     });
     el.addEventListener('wheel', e => {
-      radius = Math.min(60, Math.max(20, radius + e.deltaY * 0.03));
-      height = Math.min(30, Math.max(9, height + e.deltaY * 0.012));
+      zoomAdj = Math.min(14, Math.max(-8, zoomAdj + e.deltaY * 0.03));
     }, { passive: true });
 
     addEventListener('resize', () => {
@@ -695,10 +889,96 @@
     (function animate() {
       requestAnimationFrame(animate);
       const t = clock.getElapsedTime();
+      const dt = Math.min(0.05, Math.max(0.0005, t - lastT)); lastT = t;
 
-      if (autoSpin && !dragging) angle += 0.0016;
-      camera.position.set(Math.cos(angle) * radius, height + Math.sin(t * 0.25) * 1.2, Math.sin(angle) * radius);
-      camera.lookAt(0, 3.4, 0);
+      /* ----- player movement (camera-relative, analog) ----- */
+      const gameVisible = !document.getElementById('game-screen').classList.contains('hidden');
+      const drawOpen = !document.getElementById('draw-screen').classList.contains('hidden-el');
+      const s3ok = !!scene3d; // false only on the very first synchronous frame
+      const canMove = gameVisible && !drawOpen && !(s3ok && scene3d.decoMode);
+      let mx = (input.jx + input.kx), my = (input.jy + input.ky);
+      const mLen = Math.hypot(mx, my);
+      const moving = canMove && mLen > 0.14;
+      if (moving) {
+        const cl = mLen > 1 ? 1 / mLen : 1;
+        mx *= cl; my *= cl;
+        // camera-relative: joystick up = away from camera, right = camera's right
+        tmpFwd.set(lookTarget.x - camera.position.x, 0, lookTarget.z - camera.position.z).normalize();
+        tmpRight.set(-tmpFwd.z, 0, tmpFwd.x);
+        tmpMove.set(tmpFwd.x * my + tmpRight.x * mx, 0, tmpFwd.z * my + tmpRight.z * mx);
+        const spd = Math.min(1, mLen) * 5.2; // analog: push further = walk faster
+        const k = 1 - Math.exp(-8 * dt);
+        player.vx += (tmpMove.x * spd - player.vx) * k;
+        player.vz += (tmpMove.z * spd - player.vz) * k;
+      } else {
+        // smooth stop
+        const k = 1 - Math.exp(-8 * dt);
+        player.vx *= (1 - k); player.vz *= (1 - k);
+      }
+      player.x += player.vx * dt;
+      player.z += player.vz * dt;
+      // stay on the island (grass, plaza, and dry beach)
+      const rr = Math.hypot(player.x, player.z), maxR = WALK_R;
+      if (rr > maxR) { player.x *= maxR / rr; player.z *= maxR / rr; }
+      // push out of trees / lanterns / pond / decorations (circle colliders → natural wall-slide)
+      const cols = s3ok ? scene3d.decoColliders : null;
+      const nCols = staticColliders.length + (cols ? cols.length : 0);
+      for (let i = 0; i < nCols; i++) {
+        const c = i < staticColliders.length ? staticColliders[i] : cols[i - staticColliders.length];
+        let dx = player.x - c.x, dz = player.z - c.z;
+        let d = Math.hypot(dx, dz);
+        const minD = c.r + 0.7;
+        if (d < minD) {
+          if (d < 1e-4) { dx = 1; dz = 0; d = 1e-4; } else { dx /= d; dz /= d; }
+          player.x += dx * (minD - d); player.z += dz * (minD - d);
+          const vn = player.vx * dx + player.vz * dz; // kill inward velocity → slide along
+          if (vn < 0) { player.vx -= vn * dx; player.vz -= vn * dz; }
+        }
+      }
+      player.speed = Math.hypot(player.vx, player.vz);
+      if (player.speed > 0.6) {
+        const want = Math.atan2(player.vx, player.vz);
+        let dh = want - player.heading;
+        while (dh > Math.PI) dh -= Math.PI * 2;
+        while (dh < -Math.PI) dh += Math.PI * 2;
+        player.heading += dh * (1 - Math.exp(-10 * dt));
+        lastMoveT = t;
+      }
+      const walkAmt = Math.min(1, player.speed / 3);
+      player.walkPhase += dt * (2 + player.speed * 1.6);
+      const bob = Math.abs(Math.sin(player.walkPhase)) * 0.22 * walkAmt
+                + Math.sin(t * 1.4) * 0.15 * (1 - walkAmt);
+      const py = groundY(player.x, player.z);
+      player.mesh.position.set(player.x, py + bob, player.z);
+      player.mesh.rotation.y = player.heading;
+      player.mesh.rotation.x = walkAmt * 0.07; // slight forward lean while walking
+      shadowBlob.position.set(player.x, py + 0.06, player.z);
+
+      /* ----- camera: follow behind while walking, slow orbit when idle ----- */
+      if (moving) camMode = 'follow';
+      else if (t - lastMoveT > 2.5) camMode = 'orbit';
+      desiredLook.set(player.x, player.mesh.position.y + 1.6, player.z);
+      const kPos = 1 - Math.exp(-3 * dt);
+      radius += ((camMode === 'follow' ? 13 : 40) + zoomAdj - radius) * kPos;
+      height += ((camMode === 'follow' ? 8 : 18) - height) * kPos;
+      lookTarget.lerp(desiredLook, kPos);
+      if (!dragging) {
+        if (camMode === 'follow') {
+          // behind the player: camera offset dir must equal -facing dir
+          let da = (-player.heading - Math.PI / 2) - angle;
+          while (da > Math.PI) da -= Math.PI * 2;
+          while (da < -Math.PI) da += Math.PI * 2;
+          angle += da * (1 - Math.exp(-2.4 * dt));
+        } else {
+          angle += 0.09 * dt; // slow dreamy orbit around the player
+        }
+      }
+      camera.position.set(
+        lookTarget.x + Math.cos(angle) * radius,
+        lookTarget.y + height + Math.sin(t * 0.25) * 0.8,
+        lookTarget.z + Math.sin(angle) * radius
+      );
+      camera.lookAt(lookTarget);
 
       // ocean ripple
       for (let i = 0; i < oceanPos.count; i++) {
@@ -708,9 +988,7 @@
       oceanPos.needsUpdate = true;
       oceanGeo.computeVertexNormals();
 
-      // spirits bob gently, facing each other
-      boySpirit.position.y = groundY(-1.8, 0.6) + Math.sin(t * 1.4) * 0.18;
-      girlSpirit.position.y = groundY(1.6, 0.9) + Math.sin(t * 1.4 + Math.PI) * 0.18;
+      // (player spirit is positioned by the movement code above)
 
       // clouds drift
       for (const c of clouds) {
@@ -736,7 +1014,8 @@
 
     scene3d = { renderer, scene, camera, groundY, tickers,
                 dome: island.userData.dome,
-                decoGroup, partnerDecoGroup, partnerGroundY, onTap: null };
+                decoGroup, partnerDecoGroup, partnerGroundY, onTap: null,
+                decoColliders: [], decoMode: false };
   }
 
   /* ---------------- supabase backend: auth + pairing (Phase 2) ---------------- */
@@ -836,6 +1115,7 @@
   function enterIsland() {
     stopPairPoll(); // re-armed below if still waiting for partner
     showScreen('game-screen');
+    document.getElementById('joy-zone').classList.remove('hidden-el');
     if (!scene3d) buildScene();
     const hudSub = document.getElementById('hud-sub');
     if (appState.offline) {
@@ -1047,7 +1327,7 @@
     saveTimer: null, ring: null, drawingAnims: [],
   };
   const hintEl = document.querySelector('#game-screen .hint');
-  const HINT_DEFAULT = 'drag to look around';
+  const HINT_DEFAULT = 'left stick to walk · drag to look';
 
   const DECO_DEFS = {
     flower:    { label: 'Flowers',   emoji: '🌸' },
@@ -1060,12 +1340,22 @@
     pond:      { label: 'Pond',      emoji: '💧' },
     fence:     { label: 'Fence',     emoji: '🪵' },
     bench:     { label: 'Bench',     emoji: '🪑' },
+    home:      { label: 'Home',      emoji: '🏠' },
+    stage:     { label: 'Stage',     emoji: '🎤' },
     draw:      { label: 'Draw',      emoji: '🎨' },
   };
   const FLOWER_COLORS = ['#f2a7c3', '#b9a7ff', '#ffd66e', '#fff6e8', '#ff9d8a'];
   const TREE_TINTS = [0x7cc79a, 0x8fd6a4, 0x6fbf8f, 0xa8e0b8];
   const CAR_COLORS = ['#9be7ff', '#f2a7c3', '#ffd66e', '#b9a7ff'];
   const DRAW_COLORS = ['#ffd9ec', '#f2a7c3', '#b9a7ff', '#9be7ff', '#a8e0b8', '#ffd66e', '#ff9d8a', '#fff6e8'];
+  // collision radii for the movement phase (circle colliders, world units)
+  const DECO_RADII = { flower: 0.35, tree: 1.5, garden: 2.0, bookshop: 1.9, cafeteria: 1.9,
+                       car: 1.7, lantern: 0.55, pond: 2.7, fence: 1.6, bench: 1.1,
+                       home: 2.8, stage: 3.4, draw: 0.9 };
+  function refreshDecoColliders() {
+    if (!scene3d || scene3d.fallback) return;
+    scene3d.decoColliders = deco.items.map(d => ({ x: d.x, z: d.z, r: DECO_RADII[d.t] || 1 }));
+  }
 
   function decoMat(color) {
     return new THREE.MeshStandardMaterial({ color, flatShading: true, roughness: 1 });
@@ -1193,6 +1483,83 @@
     });
     return g;
   }
+  // buildable home — cfg: {wall, wallColor, roof, roofColor, doorColor}
+  function buildHome(cfg) {
+    cfg = cfg || {};
+    const wall = cfg.wall || 'wood';
+    const wallColor = cfg.wallColor || (wall === 'brick' ? '#c97b62' : wall === 'plaster' ? '#f6ead2' : '#c99a6b');
+    const roofStyle = cfg.roof || 'peaked';
+    const roofColor = cfg.roofColor || '#8f6fb8';
+    const doorColor = cfg.doorColor || '#4a3f66';
+    const g = new THREE.Group();
+    const plinth = new THREE.Mesh(new THREE.BoxGeometry(4.6, 0.5, 4.0), decoMat(0xd9c8a8));
+    plinth.position.y = 0.25; g.add(plinth);
+    const walls = new THREE.Mesh(new THREE.BoxGeometry(4.2, 2.6, 3.6), decoMat(wallColor));
+    walls.position.y = 1.8; g.add(walls);
+    if (wall === 'wood') {
+      for (let i = -1; i <= 1; i++) {
+        const batten = new THREE.Mesh(new THREE.BoxGeometry(0.18, 2.6, 0.06), decoMat(0xa87952));
+        batten.position.set(i * 1.4, 1.8, 1.83); g.add(batten);
+      }
+    } else if (wall === 'brick') {
+      [1.15, 2.45].forEach(y => {
+        const strip = new THREE.Mesh(new THREE.BoxGeometry(4.24, 0.1, 3.64), decoMat(0xe8d5c0));
+        strip.position.y = y; g.add(strip);
+      });
+    }
+    if (roofStyle === 'flat') {
+      const trim = new THREE.Mesh(new THREE.BoxGeometry(4.75, 0.16, 4.15), decoMat(0xfff6e8));
+      trim.position.y = 3.12; g.add(trim);
+      const slab = new THREE.Mesh(new THREE.BoxGeometry(4.7, 0.35, 4.1), decoMat(roofColor));
+      slab.position.y = 3.35; g.add(slab);
+    } else {
+      const roof = new THREE.Mesh(new THREE.ConeGeometry(3.5, 1.9, 4), decoMat(roofColor));
+      roof.position.y = 4.05; roof.rotation.y = Math.PI / 4; g.add(roof);
+      const chimney = new THREE.Mesh(new THREE.BoxGeometry(0.5, 1.1, 0.5), decoMat(0xb9836a));
+      chimney.position.set(1.1, 4.3, 0.4); g.add(chimney);
+    }
+    const door = new THREE.Mesh(new THREE.BoxGeometry(0.95, 1.7, 0.12), decoMat(doorColor));
+    door.position.set(0, 1.35, 1.83); g.add(door);
+    const knob = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 6),
+      new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
+    knob.position.set(0.32, 1.35, 1.92); g.add(knob);
+    [-1.35, 1.35].forEach(x => {
+      const win = new THREE.Mesh(new THREE.BoxGeometry(0.85, 0.85, 0.1),
+        new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
+      win.position.set(x, 2.0, 1.83); g.add(win);
+    });
+    return g;
+  }
+  // singing stage — wooden platform, backdrop arch, mic, glowing spotlights
+  function buildStage() {
+    const g = new THREE.Group();
+    const deck = new THREE.Mesh(new THREE.CylinderGeometry(3.2, 3.4, 0.55, 14), decoMat(0xb9836a));
+    deck.position.y = 0.28; g.add(deck);
+    const deckTop = new THREE.Mesh(new THREE.CircleGeometry(3.2, 14), decoMat(0xd9a878));
+    deckTop.rotation.x = -Math.PI / 2; deckTop.position.y = 0.56; g.add(deckTop);
+    const arch = new THREE.Mesh(new THREE.TorusGeometry(2.3, 0.28, 8, 20, Math.PI), decoMat(0xb9a7ff));
+    arch.position.set(0, 0.55, -1.9); g.add(arch);
+    [-2.3, 2.3].forEach(x => {
+      const star = new THREE.Mesh(new THREE.SphereGeometry(0.3, 8, 6),
+        new THREE.MeshBasicMaterial({ color: 0xffe9a8 }));
+      star.position.set(x, 0.55, -1.9); g.add(star);
+    });
+    const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.06, 0.09, 1.7, 6), decoMat(0x4a3f66));
+    pole.position.set(0, 1.4, 0.6); g.add(pole);
+    const mic = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), decoMat(0x8f6fb8));
+    mic.position.set(0, 2.3, 0.6); g.add(mic);
+    [-2.4, 2.4].forEach(x => {
+      const post = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 1.5, 6), decoMat(0x4a3f66));
+      post.position.set(x, 1.3, 1.2); g.add(post);
+      const lamp = new THREE.Mesh(new THREE.SphereGeometry(0.34, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0x9be7ff }));
+      lamp.position.set(x, 2.15, 1.2); g.add(lamp);
+      const halo = new THREE.Mesh(new THREE.SphereGeometry(0.62, 10, 8),
+        new THREE.MeshBasicMaterial({ color: 0x9be7ff, transparent: true, opacity: 0.2 }));
+      halo.position.set(x, 2.15, 1.2); g.add(halo);
+    });
+    return g;
+  }
   function buildDrawingFrame(tex) {
     const g = new THREE.Group();
     const pole = new THREE.Mesh(new THREE.CylinderGeometry(0.09, 0.12, 1.6, 6), decoMat(0x4a3f66));
@@ -1228,6 +1595,8 @@
       case 'pond':      return buildPondDeco();
       case 'fence':     return buildFence();
       case 'bench':     return buildBench();
+      case 'home':      return buildHome(def.cfg);
+      case 'stage':     return buildStage();
       case 'drawing':   return buildDrawingFrame(def._tex || null);
       default:          return buildFlower('#f2a7c3');
     }
@@ -1248,7 +1617,7 @@
     const hits = castAt(clientX, clientY).intersectObject(scene3d.dome, false);
     if (!hits.length) return null;
     const p = hits[0].point;
-    if (Math.hypot(p.x, p.z) > 13.5) return null; // keep things on the grass
+    if (Math.hypot(p.x, p.z) > 26) return null; // keep things on the grass + plaza, off the beach
     return p;
   }
   function pickDeco(clientX, clientY) {
@@ -1280,6 +1649,7 @@
   function renderMyDeco() {
     if (!scene3d || scene3d.fallback) return;
     clearGroup(scene3d.decoGroup);
+    refreshDecoColliders();
     deco.items.forEach(def => {
       if (def.t === 'drawing' && def.path) {
         loadDrawingTexture(def.path).then(tex => {
@@ -1429,13 +1799,25 @@
     return 'd' + Date.now().toString(36) + Math.floor(Math.random() * 999);
   }
   function addItem(type, p) {
+    if (type === 'home') {
+      // one home per island — placing a new one replaces the old
+      const old = deco.items.find(d => d.t === 'home');
+      if (old) {
+        const m = findDecoMesh(old.id);
+        if (m) scene3d.decoGroup.remove(m);
+        deco.items = deco.items.filter(d => d.id !== old.id);
+        if (deco.selectedId === old.id) selectItemSilent();
+      }
+    }
     const def = { id: newDecoId(), t: type,
                   x: +p.x.toFixed(2), z: +p.z.toFixed(2), r: 0 };
     if (type === 'flower') def.c = deco.flowerColor;
     if (type === 'tree') def.c = '#' + TREE_TINTS[deco.items.length % TREE_TINTS.length].toString(16).padStart(6, '0');
     if (type === 'car') def.c = CAR_COLORS[deco.items.length % CAR_COLORS.length];
+    if (type === 'home') def.cfg = Object.assign({}, deco.homeCfg || {});
     deco.items.push(def);
     renderOne(def, scene3d.decoGroup, scene3d.groundY);
+    refreshDecoColliders();
     scheduleSave();
   }
   function moveItem(id, p) {
@@ -1451,6 +1833,7 @@
     showRing(def);
     deco.movingId = null;
     hintEl.textContent = 'move · turn · remove — or tap elsewhere';
+    refreshDecoColliders();
     scheduleSave();
   }
 
@@ -1476,6 +1859,7 @@
     deco.drawingAnims = deco.drawingAnims.filter(a => a.g !== mesh);
     deco.items = deco.items.filter(d => d.id !== id);
     selectItem(null);
+    refreshDecoColliders();
     scheduleSave();
     showToast('removed');
   });
@@ -1531,6 +1915,7 @@
   }
   function chooseTool(key, btn) {
     if (key === 'draw') { openDraw(); return; }
+    if (key === 'home') { openHomeCustomizer(); return; }
     document.querySelectorAll('#deco-chips .chip').forEach(c => c.classList.remove('active'));
     deco.tool = (deco.tool === key) ? null : key;
     selectItem(null);
@@ -1540,6 +1925,80 @@
                                    : 'tap an item, then tap your island';
   }
 
+  /* ----- home customizer: design before placing, one home per island ----- */
+  const homeCfg = { wall: 'wood', wallColor: '#c99a6b', roof: 'peaked',
+                    roofColor: '#8f6fb8', doorColor: '#4a3f66' };
+  const HOME_WALLS = [['wood', 'Wood'], ['brick', 'Brick'], ['plaster', 'Plaster']];
+  const HOME_WALL_COLORS = ['#c99a6b', '#c97b62', '#f6ead2', '#b9a7ff', '#9fd8a8'];
+  const HOME_ROOFS = [['peaked', 'Peaked'], ['flat', 'Flat']];
+  const HOME_ROOF_COLORS = ['#8f6fb8', '#f2a7c3', '#5f8fb8', '#ff9d8a', '#4a3f66'];
+  const HOME_DOOR_COLORS = ['#4a3f66', '#8f3f4a', '#3f6f8f', '#c99a6b', '#2f3f2f'];
+  let homePanelBuilt = false;
+  function hpChipRow(elId, options, get, set) {
+    const el = document.getElementById(elId);
+    el.innerHTML = '';
+    options.forEach(([val, label]) => {
+      const b = document.createElement('button');
+      b.className = 'hp-chip' + (get() === val ? ' active' : '');
+      b.textContent = label;
+      b.addEventListener('click', () => {
+        set(val);
+        el.querySelectorAll('.hp-chip').forEach(x => x.classList.remove('active'));
+        b.classList.add('active');
+      });
+      el.appendChild(b);
+    });
+  }
+  function hpSwatches(elId, colors, get, set) {
+    const el = document.getElementById(elId);
+    el.innerHTML = '';
+    colors.forEach(c => {
+      const d = document.createElement('button');
+      d.className = 'hp-dot' + (get().toLowerCase() === c.toLowerCase() ? ' active' : '');
+      d.style.background = c;
+      d.setAttribute('aria-label', c);
+      d.addEventListener('click', () => {
+        set(c);
+        el.querySelectorAll('.hp-dot').forEach(x => x.classList.remove('active'));
+        d.classList.add('active');
+      });
+      el.appendChild(d);
+    });
+  }
+  function buildHomePanel() {
+    if (homePanelBuilt) return;
+    homePanelBuilt = true;
+    hpChipRow('hp-wallmat', HOME_WALLS, () => homeCfg.wall, v => { homeCfg.wall = v; });
+    hpSwatches('hp-wallcolor', HOME_WALL_COLORS, () => homeCfg.wallColor, v => { homeCfg.wallColor = v; });
+    hpChipRow('hp-roofstyle', HOME_ROOFS, () => homeCfg.roof, v => { homeCfg.roof = v; });
+    hpSwatches('hp-roofcolor', HOME_ROOF_COLORS, () => homeCfg.roofColor, v => { homeCfg.roofColor = v; });
+    hpSwatches('hp-doorcolor', HOME_DOOR_COLORS, () => homeCfg.doorColor, v => { homeCfg.doorColor = v; });
+  }
+  function openHomeCustomizer() {
+    buildHomePanel();
+    selectItem(null);
+    document.getElementById('home-panel').classList.remove('hidden-el');
+    hintEl.textContent = 'design your home, then place it';
+  }
+  function closeHomeCustomizer() {
+    document.getElementById('home-panel').classList.add('hidden-el');
+  }
+  document.getElementById('home-cancel').addEventListener('click', () => {
+    closeHomeCustomizer();
+    hintEl.textContent = 'tap an item, then tap your island';
+  });
+  document.getElementById('home-place').addEventListener('click', () => {
+    closeHomeCustomizer();
+    document.querySelectorAll('#deco-chips .chip').forEach(c => c.classList.remove('active'));
+    deco.tool = 'home';
+    deco.homeCfg = Object.assign({}, homeCfg);
+    selectItem(null);
+    document.querySelectorAll('#deco-chips .chip').forEach(c => {
+      if (c.textContent.indexOf('Home') !== -1) c.classList.add('active');
+    });
+    hintEl.textContent = 'tap your island to place your home · replaces the old one';
+  });
+
   /* ----- enter / exit / init ----- */
   function enterDeco() {
     if (appState.offline || !sb) { showToast('you are offline — connect to decorate'); return; }
@@ -1547,6 +2006,8 @@
     if (!appState.pair) { showToast('pair up first, then decorate'); return; }
     deco.active = true;
     buildPalette();
+    if (scene3d) scene3d.decoMode = true;
+    document.getElementById('joy-zone').classList.add('hidden-el');
     document.getElementById('hud-bottom').classList.add('hidden-el');
     document.getElementById('deco-bar').classList.remove('hidden-el');
     scene3d.onTap = onDecoTap;
@@ -1559,7 +2020,9 @@
     deco.movingId = null;
     saveDecoNow();
     selectItemSilent();
-    if (scene3d) scene3d.onTap = null;
+    if (scene3d) { scene3d.onTap = null; scene3d.decoMode = false; }
+    document.getElementById('home-panel').classList.add('hidden-el');
+    document.getElementById('joy-zone').classList.remove('hidden-el');
     document.getElementById('deco-bar').classList.add('hidden-el');
     document.getElementById('hud-bottom').classList.remove('hidden-el');
     if (hintEl) hintEl.textContent = HINT_DEFAULT;
@@ -1727,7 +2190,7 @@
     return blob;
   }
   function freeSpot() {
-    for (let r = 3; r < 12; r += 2) {
+    for (let r = 3; r < 20; r += 2) {
       for (let a = 0; a < 6.28; a += 0.55) {
         const x = Math.cos(a) * r, z = Math.sin(a) * r;
         const clash = deco.items.some(d => Math.hypot(d.x - x, d.z - z) < 2.4);
@@ -1750,6 +2213,7 @@
     catch (e) { def._tex = null; }
     deco.items.push(def);
     renderOne(def, scene3d.decoGroup, scene3d.groundY);
+    refreshDecoColliders();
     scheduleSave();
   }
   document.getElementById('draw-save').addEventListener('click', async () => {
