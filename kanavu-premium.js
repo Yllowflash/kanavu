@@ -171,7 +171,23 @@ function run(){
 var n=0;
 var t=setInterval(function(){
   n++;
-  try{ if(run()&&n>30) clearInterval(t); }catch(e){}
+  try{ 
+    if(run()&&n>30) clearInterval(t); 
+    // Show player coords for debugging
+    try{
+      var W=window.__kvWorld;
+      if(W&&W.player){
+        var d=document.getElementById('kv-coords');
+        if(!d){
+          d=document.createElement('div');
+          d.id='kv-coords';
+          d.style.cssText='position:fixed;bottom:8px;left:8px;z-index:99999;background:rgba(0,0,0,0.8);color:#ff0;font:14px monospace;padding:8px;border-radius:6px;';
+          document.body.appendChild(d);
+        }
+        d.textContent='x:'+Math.round(W.player.position.x)+' z:'+Math.round(W.player.position.z);
+      }
+    }catch(e){}
+  }catch(e){}
   if(n>120) clearInterval(t);
 },2000);
 }();
