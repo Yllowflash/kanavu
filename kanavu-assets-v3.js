@@ -229,11 +229,47 @@ function classify(g){
   if(has(s,'cone:1.5,0.8,10') && has(s,'box:1.5,0.06,0.9')) return 'stall';
   if(has(s,'cyl:0.06,0.09,0.9,6') && has(s,'ico:0.34,0')) return 'tree_round';
   if(has(s,'cyl:0.22,0.32,1.3,7') && has(s,'cone:1.35,2.1,8')) return 'tree_pine';
+  // ROBUST FALLBACK (2026-10-09): loose house matching. Any Group with a
+  // Box body + 4-segment Cone pyramid roof is a house, regardless of exact
+  // dimensions. Catches the large manor (7x3.4x5.6) and any variant the
+  // exact signatures miss. Size determines the V2 replacement class.
+  var loose = classifyLooseHouse(g);
+  if(loose) return loose;
   return null;
+}
+/* Loose house detector: Box + 4-seg Cone = house. Returns 'house_a',
+   'house_b', or 'house_manor' based on body size. V2 GLBs never have
+   this procedural Box+Cone4 combo as direct children.
+   Requires the Box to be a substantial body (height > 1.0) to avoid
+   matching gazebos/pavilions (flat base + posts + roof). */
+function classifyLooseHouse(g){
+  var hasBox = false, hasCone4 = false, maxBoxDim = 0;
+  for(var i=0;i<g.children.length;i++){
+    var c = g.children[i];
+    if(!c.isMesh || !c.geometry) continue;
+    var t = c.geometry.type || '', p = c.geometry.parameters || {};
+    if(t === 'BoxGeometry'){
+      var h = p.height || 0;
+      if(h > 1.0){  // substantial body, not a flat platform
+        hasBox = true;
+        var d = Math.max(p.width||0, p.height||0, p.depth||0);
+        if(d > maxBoxDim) maxBoxDim = d;
+      }
+    }
+    if(t === 'ConeGeometry' && (p.radialSegments||0) === 4){
+      hasCone4 = true;
+    }
+  }
+  if(!hasBox || !hasCone4) return null;
+  // Don't re-match groups we already swapped (they contain a _v3clone wrap)
+  if(maxBoxDim >= 6) return 'house_manor';   // large manor (7x3.4x5.6)
+  if(maxBoxDim >= 3) return 'house_b';        // village house (3.4x2.2x2.8)
+  return 'house_a';                           // small house (2.6x1.9x2.2)
 }
 var SWAP_MAP = {
   house_a:    ['village/house-teal-1.glb','village/house-teal-2.glb','village/house-stone.glb'],
   house_b:    ['village/house-teal-2.glb','village/house-stone.glb'],
+  house_manor:['village/house-stone.glb','village/house-teal-2.glb'],
   lamp:       ['plaza/lantern-post.glb'],
   well:       ['village/well.glb'],
   bench:      ['interior/bench.glb'],
@@ -244,7 +280,7 @@ var SWAP_MAP = {
 /* V2 model footprint, in world units, per swap class (largest dim).
    Sized to sit naturally where the placeholder stood. */
 var SWAP_SIZE = {
-  house_a: 4.2, house_b: 5.2, lamp: 3.0, well: 2.2,
+  house_a: 4.2, house_b: 5.2, house_manor: 8.5, lamp: 3.0, well: 2.2,
   bench: 1.8, stall: 3.4, tree_round: 4.5, tree_pine: 7.5
 };
 var _sv = new THREE_.Vector3();
@@ -320,6 +356,103 @@ function sweep(){
   }
 }
 
+/* ================= ROBUST VILLAGE HARD-REPLACE (2026-10-09) =================
+   Position-based replacement for the 4 village houses + manor. The
+   signature-matching sweep above is fragile (exact dimensions, timing,
+   scene structure). This does a direct pass: find ANY Group within
+   3 units of a known house position, REMOVE it entirely from the scene,
+   and place a V2 GLB house at that spot. Per Adi's direction: "If new
+   buildings are used, remove all old equivalents."
+   Known positions from kanavu-game.js oe() calls and manor IIFE. */
+var VILLAGE_HOUSES = [
+  { x:-15, z:-3,  cls:'house_b',     rot:0 },
+  { x:12,  z:10,  cls:'house_b',     rot:0 },
+  { x:0,   z:-14, cls:'house_b',     rot:0 },
+  { x:28,  z:12,  cls:'house_b',     rot:0 },
+  { x:-14, z:-58, cls:'house_manor', rot:0 }
+];
+var villageReplaced = false;
+function villageHardReplace(){
+  if(villageReplaced) return;
+  villageReplaced = true;
+  log('village hard-replace: starting');
+  var found = 0, removed = 0;
+  try{
+    for(var hi=0; hi<VILLAGE_HOUSES.length; hi++){
+      (function(h){
+        var hx = h.x, hz = h.z, cls = h.cls;
+        // Find groups near this position
+        var targets = [];
+        W.scene.traverse(function(o){
+          if(!o.isGroup || o === W.scene) return;
+          var ud = o.userData || {};
+          // Skip already-processed, V2 clones, and protected
+          if(ud._v3swapped || ud._v3skip || ud._v3clone || ud._v3hr) return;
+          if(ud._asset || ud._kvNew || ud.rig) return;
+          o.getWorldPosition(_sv);
+          var d = Math.hypot(_sv.x - hx, _sv.z - hz);
+          if(d < 4.0){
+            // Must look like a building (has meshes, not a marker/light)
+            var meshCount = 0;
+            o.traverse(function(c){ if(c.isMesh) meshCount++; });
+            if(meshCount >= 3) targets.push(o);
+          }
+        });
+        if(!targets.length){
+          log('village hard-replace: no group found at ('+hx+','+hz+')');
+          return;
+        }
+        found++;
+        // Remove the old building(s) entirely
+        for(var ti=0; ti<targets.length; ti++){
+          var t = targets[ti];
+          t.userData._v3hr = true;  // mark as hard-replaced
+          if(t.parent) t.parent.remove(t);
+          removed++;
+        }
+        log('village hard-replace: removed '+targets.length+' group(s) at ('+hx+','+hz+')');
+        // Place V2 GLB house at the position
+        var urls = SWAP_MAP[cls];
+        if(!urls || !urls.length) return;
+        var url = urls[Math.floor(sHash(hx, hz) * urls.length) % urls.length];
+        getModel(url, function(tpl){
+          if(!tpl){
+            log('village hard-replace: GLB failed for ('+hx+','+hz+'): '+url);
+            return;
+          }
+          try{
+            var obj = tpl.clone(true);
+            _box.setFromObject(obj);
+            _box.getSize(_v3a);
+            var md = Math.max(_v3a.x, _v3a.y, _v3a.z) || 1;
+            var s = (SWAP_SIZE[cls] || 5) / md;
+            obj.scale.setScalar(s);
+            var gy = 0;
+            try{ gy = W.groundY(hx, hz); }catch(_){}
+            obj.position.set(hx, gy - _box.min.y * s, hz);
+            obj.rotation.y = sHash(hx+3.7, hz+9.1) * Math.PI * 2;
+            obj.traverse(function(o){
+              if(o.isMesh){ o.castShadow = true; o.receiveShadow = true; }
+            });
+            var wrap = new THREE_.Group();
+            wrap.userData._v3clone = true;
+            wrap.userData._v3hr = true;
+            wrap.add(obj);
+            W.scene.add(wrap);
+            stats.swapped++;
+            log('village hard-replace: placed '+url+' at ('+hx+','+hz+')');
+          }catch(e){
+            log('village hard-replace: place failed: '+(e.message||e));
+          }
+        });
+      })(VILLAGE_HOUSES[hi]);
+    }
+    log('village hard-replace: done, found='+found+' removed='+removed);
+  }catch(e){
+    log('village hard-replace: error '+(e.message||e));
+  }
+}
+
 /* ================= diagnostics ================= */
 window.__kvAssetsV3 = {
   stats: function(){
@@ -342,6 +475,8 @@ window.__kvAssetsV3 = {
 try{ wireTerrain(); }catch(_){}
 try{ sweep(); }catch(_){}
 setInterval(function(){ try{ sweep(); }catch(_){} }, 3000);
+// Robust village replacement runs once after 12s (world fully built)
+setTimeout(function(){ try{ villageHardReplace(); }catch(_){} }, 12000);
 log('v3 wiring active');
 
 } // end init(W)

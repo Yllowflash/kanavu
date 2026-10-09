@@ -511,9 +511,10 @@ function rockPass(){
         tmp.lerp(rock, rk*0.8);
         tmp.multiplyScalar(band);
       } else if(y < 1.7){
-        // dry sand band just above the waterline
-        var sb = (1-sstep(0.4,1.7,y))*sstep(-0.9,-0.35,y);
-        if(sb>0) tmp.lerp(sand, sb*0.85);
+        // dry sand band just above the waterline (narrowed 2026-10-09:
+        // was painting pale mounds on low inland terrain near the bridge)
+        var sb = (1-sstep(0.9,1.7,y))*sstep(-0.9,-0.35,y);
+        if(sb>0) tmp.lerp(sand, sb*0.6);
       }
       // faint large-scale variation so grassland isn't airbrushed-flat
       if(y>=1.7 && sl<=0.55 && y<13){
