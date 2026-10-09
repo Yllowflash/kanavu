@@ -3,6 +3,15 @@
    Runs aggressively until it succeeds. */
 !function(){
 "use strict";
+// DEBUG: show immediately on script load (before world check)
+try{
+  var _dbg=document.createElement('div');
+  _dbg.id='kv-v5-debug';
+  _dbg.style.cssText='position:fixed;top:8px;left:8px;z-index:99999;background:rgba(0,0,0,0.75);color:#0f0;font:12px monospace;padding:8px;border-radius:6px;pointer-events:none;';
+  _dbg.textContent='v5 loaded, waiting for world...';
+  document.body.appendChild(_dbg);
+}catch(e){}
+function __setDbg(t){ try{ document.getElementById('kv-v5-debug').textContent=t; }catch(e){} }
 var BASE='https://ersejxowxutsefalyjaf.supabase.co/storage/v1/object/public/game-assets/v2/';
 var HOUSES=[
   {x:-15,z:-3, url:'village/house-teal-1.glb', s:1.0, ry:0.5},
@@ -21,15 +30,7 @@ function boot(){
 function init(W){
   var THREE_=window.THREE;
   var loader=new THREE_.GLTFLoader();
-  // Debug overlay
-  try{
-    var dbg=document.createElement('div');
-    dbg.id='kv-v5-debug';
-    dbg.style.cssText='position:fixed;top:8px;left:8px;z-index:99999;background:rgba(0,0,0,0.75);color:#0f0;font:12px monospace;padding:8px;border-radius:6px;pointer-events:none;';
-    dbg.textContent='v5: starting...';
-    document.body.appendChild(dbg);
-  }catch(e){}
-  function setDbg(t){ try{ document.getElementById('kv-v5-debug').textContent=t; }catch(e){} }
+  __setDbg('v5: world found, starting replacement...');
 
   // Step 1: Remove old houses (box + cone roof groups near village positions)
   var removed=0;
@@ -57,7 +58,7 @@ function init(W){
     }
   });
   toRemove.forEach(function(o){ try{ o.parent.remove(o); removed++; }catch(e){} });
-  setDbg('v5: removed '+removed+' old houses, loading new...');
+  _setDbg('v5: removed '+removed+' old houses, loading new...');
 
   // Step 2: Place new GLB houses
   var loaded=0;
@@ -74,10 +75,10 @@ function init(W){
       o.traverse(function(m){ if(m.isMesh){ m.castShadow=true; m.receiveShadow=true; } });
       W.scene.add(o);
       loaded++;
-      setDbg('v5: removed '+removed+', new houses '+loaded+'/'+HOUSES.length);
-      if(loaded>=HOUSES.length){ setDbg('v5: DONE - '+loaded+' new houses placed'); done=true; }
+      _setDbg('v5: removed '+removed+', new houses '+loaded+'/'+HOUSES.length);
+      if(loaded>=HOUSES.length){ _setDbg('v5: DONE - '+loaded+' new houses placed'); done=true; }
     }, undefined, function(err){
-      setDbg('v5: FAILED to load '+h.url);
+      _setDbg('v5: FAILED to load '+h.url);
     });
   });
 }
