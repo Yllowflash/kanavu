@@ -510,10 +510,10 @@ function rockPass(){
         var rk = Math.min(1,(sl-0.55)*2.4);
         tmp.lerp(rock, rk*0.8);
         tmp.multiplyScalar(band);
-      } else if(y < 0.6){
+      } else if(y < 0.25){
         // dry sand band hugging the waterline (narrowed 2026-10-09:
         // was painting pale mounds on low inland terrain near the bridge)
-        var sb = (1-sstep(0.15,0.6,y))*sstep(-0.5,-0.15,y);
+        var sb = (1-sstep(0.05,0.25,y))*sstep(-0.5,-0.05,y);
         if(sb>0) tmp.lerp(sand, sb*0.5);
       }
       // faint large-scale variation so grassland isn't airbrushed-flat
