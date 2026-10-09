@@ -325,7 +325,8 @@ function swapGroup(g, cls){
 
 var SWEEP_R = 90, SWEEP_MAX = 6;
 function sweep(){
-  try{ if(W.decoMode) return; }catch(_){}
+  // decoMode guard removed 2026-10-09: building replacement must work
+  // in decoration mode too (user was stuck seeing old buildings)
   wireTerrain();
   var pp = playerPos();
   var cands = [];
