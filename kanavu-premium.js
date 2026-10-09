@@ -138,31 +138,38 @@ function run(){
     }
   }
   
-  // 5. Paint water under bridge (remove sand/land appearance)
-  // Color terrain blue in bridge corridor
+  // 5. Bridge water: find bridge by GLB and cover land with water plane
   try{
+    var bridgePos=null;
+    // Find the rope bridge by looking for its distinctive shape
+    // or by checking loaded GLB URLs
     W.scene.traverse(function(obj){
-      if(obj.isMesh&&obj.geometry&&obj.geometry.attributes&&obj.geometry.attributes.position&&obj.geometry.attributes.color){
-        var pos=obj.geometry.attributes.position;
-        var col=obj.geometry.attributes.color;
-        if(pos.count<500) return;
-        var modified=false;
-        var water=new window.THREE.Color(0x2a5a8a);
-        for(var i=0;i<pos.count;i++){
-          var vx=pos.getX(i), vz=pos.getZ(i);
-          var wx=obj.position.x+vx, wz=obj.position.z+vz;
-          // Bridge corridor
-          if(wx>-30&&wx<30&&wz>-20&&wz<20){
-            var vy=pos.getY(i);
-            if(vy>-0.5&&vy<1.2){
-              col.setXYZ(i, water.r, water.g, water.b);
-              modified=true;
+      if(bridgePos) return;
+      // Check if this is a loaded GLB (has userData from loader)
+      if(obj.isGroup&&obj.children.length>5){
+        try{
+          var box=new window.THREE.Box3().setFromObject(obj);
+          var size=new window.THREE.Vector3(); box.getSize(size);
+          var center=new window.THREE.Vector3(); box.getCenter(center);
+          // Bridge: long (>15) narrow (<8) low (<6)
+          if((size.x>15&&size.z<8||size.z>15&&size.x<8)&&size.y<6){
+            // Check if near center of map (bridges connect islands)
+            if(Math.abs(center.x)<100&&Math.abs(center.z)<100){
+              bridgePos={x:center.x, z:center.z, sx:size.x, sz:size.z};
             }
           }
-        }
-        if(modified){ col.needsUpdate=true; }
+        }catch(e){}
       }
     });
+    if(bridgePos){
+      // Place a water plane over the bridge area
+      var wgeo=new window.THREE.PlaneGeometry(Math.max(bridgePos.sx,20)+20, Math.max(bridgePos.sz,20)+20);
+      wgeo.rotateX(-Math.PI/2);
+      var wmat=new window.THREE.MeshBasicMaterial({color:0x2a6a9a, transparent:true, opacity:0.95});
+      var water=new window.THREE.Mesh(wgeo, wmat);
+      water.position.set(bridgePos.x, 0.15, bridgePos.z);
+      W.scene.add(water);
+    }
   }catch(e){}
   
   // 6. Restore original island bounds (260 instead of 380)
