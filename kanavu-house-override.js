@@ -17,31 +17,23 @@ function showMsg(t){
 }
 function isOldHouse(g){
   if(!g||!g.isGroup) return false;
-  // Check for the EXACT old house structure:
-  // - Box body 2.6 x 1.9 x 2.2
-  // - Cone roof (4 segments)
-  // This avoids matching trees, bridges, or other props
-  var foundBody=false, foundRoof=false;
+  // Size check: houses are 2-6 units; exclude bridges (large) and grass (tiny)
+  var box=new window.THREE.Box3().setFromObject(g);
+  var size=new window.THREE.Vector3();
+  box.getSize(size);
+  if(size.x>7||size.z>7||size.y>5) return false;
+  if(size.x<1.5||size.z<1.5||size.y<1.5) return false;
+  
+  // Must have both Box (body) and Cone (roof)
+  var hasBox=false, hasCone=false;
   g.traverse(function(c){
     if(c.isMesh&&c.geometry){
-      var geo=c.geometry;
-      if(geo.type==='BoxGeometry'){
-        // Check dimensions match house body (2.6 x 1.9 x 2.2)
-        var p=geo.parameters;
-        if(p&&Math.abs(p.width-2.6)<0.1&&Math.abs(p.height-1.9)<0.1&&Math.abs(p.depth-2.2)<0.1){
-          foundBody=true;
-        }
-      }
-      if(geo.type==='ConeGeometry'){
-        var p=geo.parameters;
-        // House roof: radius ~2.15, height ~1.3, 4 radial segments
-        if(p&&Math.abs(p.radius-2.15)<0.2&&p.radialSegments===4){
-          foundRoof=true;
-        }
-      }
+      var t=c.geometry.type;
+      if(t==='BoxGeometry') hasBox=true;
+      if(t==='ConeGeometry') hasCone=true;
     }
   });
-  return foundBody&&foundRoof;
+  return hasBox&&hasCone;
 }
 function replaceHouses(){
   var W=null;
