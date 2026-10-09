@@ -14,7 +14,7 @@ var HOUSES=[
 var done=false, attempts=0;
 function boot(){
   var W=null; try{ W=window.__kvWorld; }catch(e){}
-  if(!W||!W.scene||!W.player) return false;
+  if(!W||!W.scene) return false;
   if(!window.THREE||!window.THREE.GLTFLoader) return false;
   init(W); return true;
 }
