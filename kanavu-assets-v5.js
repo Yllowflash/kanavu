@@ -4,13 +4,23 @@
 !function(){
 "use strict";
 // DEBUG: show immediately on script load (before world check)
-try{
-  var _dbg=document.createElement('div');
-  _dbg.id='kv-v5-debug';
-  _dbg.style.cssText='position:fixed;top:8px;left:8px;z-index:99999;background:rgba(0,0,0,0.75);color:#0f0;font:12px monospace;padding:8px;border-radius:6px;pointer-events:none;';
-  _dbg.textContent='v5 loaded, waiting for world...';
-  document.body.appendChild(_dbg);
-}catch(e){}
+function _showDbg(){
+  try{
+    if(document.getElementById('kv-v5-debug')) return;
+    var _dbg=document.createElement('div');
+    _dbg.id='kv-v5-debug';
+    _dbg.style.cssText='position:fixed;top:8px;left:8px;z-index:99999;background:rgba(0,0,0,0.75);color:#0f0;font:12px monospace;padding:8px;border-radius:6px;pointer-events:none;';
+    _dbg.textContent='v5 loaded, waiting for world...';
+    (document.body||document.documentElement).appendChild(_dbg);
+  }catch(e){}
+}
+_showDbg();
+// Retry in case body wasn't ready
+if(document.readyState==='loading'){
+  document.addEventListener('DOMContentLoaded',_showDbg);
+} else {
+  setTimeout(_showDbg,1000);
+}
 function __setDbg(t){ try{ document.getElementById('kv-v5-debug').textContent=t; }catch(e){} }
 var BASE='https://ersejxowxutsefalyjaf.supabase.co/storage/v1/object/public/game-assets/v2/';
 var HOUSES=[
