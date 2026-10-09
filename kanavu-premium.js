@@ -173,18 +173,23 @@ var t=setInterval(function(){
   n++;
   try{ 
     if(run()&&n>30) clearInterval(t); 
-    // Show player coords for debugging
+    // Show coords - try multiple ways to find player
     try{
       var W=window.__kvWorld;
-      if(W&&W.player){
+      var px=null, pz=null;
+      if(W){
+        if(W.player&&W.player.position){ px=W.player.position.x; pz=W.player.position.z; }
+        else if(W.camera&&W.camera.position){ px=W.camera.position.x; pz=W.camera.position.z; }
+      }
+      if(px!==null){
         var d=document.getElementById('kv-coords');
         if(!d){
           d=document.createElement('div');
           d.id='kv-coords';
-          d.style.cssText='position:fixed;bottom:8px;left:8px;z-index:99999;background:rgba(0,0,0,0.8);color:#ff0;font:14px monospace;padding:8px;border-radius:6px;';
+          d.style.cssText='position:fixed;bottom:50px;left:50%;transform:translateX(-50%);z-index:999999;background:#ff0;color:#000;font:20px monospace;padding:12px 20px;border-radius:8px;border:3px solid #f00;';
           document.body.appendChild(d);
         }
-        d.textContent='x:'+Math.round(W.player.position.x)+' z:'+Math.round(W.player.position.z);
+        d.textContent='X:'+Math.round(px)+' Z:'+Math.round(pz);
       }
     }catch(e){}
   }catch(e){}
