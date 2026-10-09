@@ -76,4 +76,6 @@ var timer=setInterval(function(){
 },1000);
 // Also try immediately
 setTimeout(function(){ try{ replaceHouses(); }catch(e){} }, 3000);
+// Show immediately on load so user knows script is running
+showMsg('house-override: loaded, waiting for game...');
 }();
