@@ -138,29 +138,29 @@ function run(){
     }
   }
   
-  // 5. Carve water under bridge (remove sand)
-  // Lower terrain in central area where bridge spans
+  // 5. Paint water under bridge (remove sand/land appearance)
+  // Color terrain blue in bridge corridor
   try{
-    var lowered=0;
     W.scene.traverse(function(obj){
-      if(obj.isMesh&&obj.geometry&&obj.geometry.attributes&&obj.geometry.attributes.position){
+      if(obj.isMesh&&obj.geometry&&obj.geometry.attributes&&obj.geometry.attributes.position&&obj.geometry.attributes.color){
         var pos=obj.geometry.attributes.position;
-        // Only terrain (large vertex count)
+        var col=obj.geometry.attributes.color;
         if(pos.count<500) return;
         var modified=false;
+        var water=new window.THREE.Color(0x2a5a8a);
         for(var i=0;i<pos.count;i++){
-          var vx=pos.getX(i), vy=pos.getY(i), vz=pos.getZ(i);
+          var vx=pos.getX(i), vz=pos.getZ(i);
           var wx=obj.position.x+vx, wz=obj.position.z+vz;
-          // Bridge corridor: central area, roughly x in [-30,30], z in [-10,10]
-          // (adjust based on actual bridge location)
-          if(wx>-30&&wx<30&&wz>-15&&wz<15){
-            if(vy>-0.5&&vy<0.8){
-              pos.setY(i,-1.5);
-              modified=true; lowered++;
+          // Bridge corridor
+          if(wx>-30&&wx<30&&wz>-20&&wz<20){
+            var vy=pos.getY(i);
+            if(vy>-0.5&&vy<1.2){
+              col.setXYZ(i, water.r, water.g, water.b);
+              modified=true;
             }
           }
         }
-        if(modified){ pos.needsUpdate=true; try{ obj.geometry.computeVertexNormals(); }catch(e){} }
+        if(modified){ col.needsUpdate=true; }
       }
     });
   }catch(e){}
