@@ -112,7 +112,7 @@ function run(){
   if(!state.pop){
     state.pop=true;
     var avoid=[[-22,-8],[-45,30],[-25,-115],[18,-20],[-15,-3],[12,10]];
-    for(var i=0;i<50;i++){
+    for(var i=0;i<25;i++){
       (function(){
         var angle=rand()*Math.PI*2;
         var dist=25+rand()*80;
