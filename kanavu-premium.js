@@ -165,6 +165,34 @@ function run(){
     });
   }catch(e){}
   
+  // 6. Restore original island bounds (260 instead of 380)
+  // Add invisible walls at ±130 (original) instead of ±190 (enlarged)
+  try{
+    if(W.staticColliders){
+      var B=130; // original half-size
+      // Add 4 walls
+      W.staticColliders.push({x:0, z:B, r:5, wall:true, x2:0, z2:-B});
+      W.staticColliders.push({x:B, z:0, r:5, wall:true, x2:-B, z2:0});
+      // Simple circular bound
+      var origUpdate=null;
+      // Patch player movement to clamp to radius
+      if(W.player){
+        var origPos=W.player.position;
+        // Use a watcher
+        setInterval(function(){
+          try{
+            var p=W.player.position;
+            var d=Math.sqrt(p.x*p.x+p.z*p.z);
+            if(d>125){
+              var s=125/d;
+              p.x*=s; p.z*=s;
+            }
+          }catch(e){}
+        },100);
+      }
+    }
+  }catch(e){}
+  
   return true;
 }
 
