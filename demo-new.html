@@ -1,0 +1,30 @@
+<!DOCTYPE html>
+<html><head><meta charset="utf-8"><meta name="viewport" content="width=device-width,initial-scale=1">
+<title>New Assets Demo</title>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="gltf-loader-umd.js"></script>
+<style>body{margin:0;overflow:hidden}canvas{display:block}#t{position:fixed;top:10px;left:10px;color:#fff;background:rgba(0,0,0,.6);padding:8px 12px;border-radius:8px;font:14px sans-serif;z-index:99}</style>
+</head><body>
+<div id="t">Loading new assets...</div>
+<script>
+var B='https://ersejxowxutsefalyjaf.supabase.co/storage/v1/object/public/game-assets/v2/';
+var sc=new THREE.Scene(); sc.background=new THREE.Color(0x87b5e0);
+var cam=new THREE.PerspectiveCamera(50,innerWidth/innerHeight,.1,500); cam.position.set(14,8,14); cam.lookAt(0,2,0);
+var r=new THREE.WebGLRenderer({antialias:true}); r.setSize(innerWidth,innerHeight); r.shadowMap.enabled=true; document.body.appendChild(r.domElement);
+sc.add(new THREE.HemisphereLight(0xffe0b3,0x3a5f3a,1.1));
+var sun=new THREE.DirectionalLight(0xffd9a0,1.4); sun.position.set(20,30,10); sun.castShadow=true; sc.add(sun);
+var gnd=new THREE.Mesh(new THREE.PlaneGeometry(60,60),new THREE.MeshStandardMaterial({color:0x5a8f4a})); gnd.rotation.x=-Math.PI/2; gnd.receiveShadow=true; sc.add(gnd);
+var L=new THREE.GLTFLoader(); var done=0,total=6;
+function put(u,x,z,s){ L.load(B+u,function(g){ var o=g.scene; o.position.set(x,0,z); o.scale.setScalar(s||1);
+  o.traverse(function(m){ if(m.isMesh){m.castShadow=true;m.receiveShadow=true;} }); sc.add(o);
+  if(++done>=total) document.getElementById('t').textContent='New premium assets — houses, trees, pine'; }); }
+put('village/house-stone.glb',-6,0,1);
+put('village/house-teal-1.glb',6,0,1);
+put('nature/pine-tall.glb',0,-8,1);
+put('nature/broadleaf.glb',-10,-6,1);
+put('nature/grass-tall.glb',3,5,2);
+put('village/barrel.glb',2,3,1);
+(function an(){ requestAnimationFrame(an); r.render(sc,cam); })();
+// simple orbit
+var t=0; setInterval(function(){ t+=0.005; cam.position.set(Math.sin(t)*16,8,Math.cos(t)*16); cam.lookAt(0,2,0); },16);
+</script></body></html>
