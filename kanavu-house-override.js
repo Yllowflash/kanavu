@@ -17,6 +17,14 @@ function showMsg(t){
 }
 function isOldHouse(g){
   if(!g||!g.isGroup) return false;
+  // Only target house-sized objects (not bridges or large structures)
+  var box=new window.THREE.Box3().setFromObject(g);
+  var size=new window.THREE.Vector3();
+  box.getSize(size);
+  // Houses are ~3-5 units; bridges are much larger
+  if(size.x>8||size.z>8||size.y>6) return false;
+  if(size.x<1||size.z<1) return false;
+  
   var hasBox=false, hasCone=false;
   g.traverse(function(c){
     if(c.isMesh&&c.geometry){
