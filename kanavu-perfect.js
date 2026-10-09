@@ -23,84 +23,85 @@ function showMsg(t){
   }catch(e){}
 }
 function isOldTree(g){
-  if(!g||!g.isGroup) return false;
-  var hasTrunk=false, hasFoliage=false;
-  g.traverse(function(c){
-    if(c.isMesh&&c.geometry){
-      var t=c.geometry.type||'';
-      var p=c.geometry.parameters||{};
-      // Trunk: CylinderGeometry(0.06, 0.09, 0.9, 6)
-      if(t.indexOf('Cylinder')>=0 && p.height && Math.abs(p.height-0.9)<0.2){
-        hasTrunk=true;
+  if(!g) return false;
+  // Look for icosahedron foliage (distinctive to old trees)
+  // Check the object itself and its children
+  var found=false;
+  try{
+    g.traverse(function(c){
+      if(found) return;
+      if(c.isMesh&&c.geometry){
+        var t=c.geometry.type||'';
+        if(t.indexOf('Icosahedron')>=0) found=true;
       }
-      // Foliage: IcosahedronGeometry(0.34, 0)
-      if(t.indexOf('Icosahedron')>=0){
-        hasFoliage=true;
-      }
-    }
-  });
-  return hasTrunk&&hasFoliage;
+    });
+  }catch(e){}
+  return found;
 }
 var done=false;
+var treeQueue=[];
 function perfect(){
   var W=null;
   try{ W=window.__kvWorld; }catch(e){}
   if(!W||!W.scene||!window.THREE||!window.THREE.GLTFLoader||!W.groundY) return false;
-  if(done) return true;
-  done=true;
   
   var loader=new window.THREE.GLTFLoader();
-  var trees=[], housesHidden=0;
   
-  // Scan scene
+  // Houses: hide by position (once)
+  if(!done){
+    done=true;
+    var housesHidden=0;
+    W.scene.traverse(function(obj){
+      if(!obj.isGroup) return;
+      for(var i=0;i<HOUSE_SPOTS.length;i++){
+        var s=HOUSE_SPOTS[i];
+        var dx=obj.position.x-s.x, dz=obj.position.z-s.z;
+        if(Math.sqrt(dx*dx+dz*dz)<3){ obj.visible=false; housesHidden++; break; }
+      }
+    });
+    // Place new houses
+    HOUSE_SPOTS.forEach(function(s){
+      loader.load(BASE+s.glb,function(gltf){
+        try{
+          var m=gltf.scene||gltf.scenes[0];
+          var y=0; try{ y=W.groundY(s.x,s.z); }catch(e){}
+          m.position.set(s.x,y,s.z); m.scale.setScalar(1.2);
+          m.traverse(function(c){ if(c.isMesh) c.castShadow=true; });
+          W.scene.add(m);
+        }catch(e){}
+      },undefined,function(){});
+    });
+    showMsg('perfect: houses done, scanning trees...');
+  }
+  
+  // Trees: continuous scan (they may load late)
+  var newTrees=[];
   W.scene.traverse(function(obj){
-    if(!obj.isGroup) return;
-    // Hide old houses by position
-    for(var i=0;i<HOUSE_SPOTS.length;i++){
-      var s=HOUSE_SPOTS[i];
-      var dx=obj.position.x-s.x, dz=obj.position.z-s.z;
-      if(Math.sqrt(dx*dx+dz*dz)<3){ obj.visible=false; housesHidden++; break; }
+    if(!obj.isGroup||obj.userData.replaced) return;
+    if(isOldTree(obj)){
+      obj.userData.replaced=true;
+      newTrees.push(obj);
     }
-    // Collect old trees
-    if(isOldTree(obj)) trees.push(obj);
   });
   
-  showMsg('perfect: '+housesHidden+' houses hidden, '+trees.length+' trees found');
-  
-  // Replace houses
-  var hPlaced=0;
-  HOUSE_SPOTS.forEach(function(s){
-    loader.load(BASE+s.glb,function(gltf){
-      try{
-        var m=gltf.scene||gltf.scenes[0];
-        var y=0; try{ y=W.groundY(s.x,s.z); }catch(e){}
-        m.position.set(s.x,y,s.z); m.scale.setScalar(1.2);
-        m.traverse(function(c){ if(c.isMesh) c.castShadow=true; });
-        W.scene.add(m); hPlaced++;
-        showMsg('perfect: houses '+hPlaced+'/'+HOUSE_SPOTS.length+', trees 0/'+trees.length);
-      }catch(e){}
-    },undefined,function(){});
-  });
-  
-  // Replace trees
-  var tPlaced=0;
-  trees.forEach(function(old,idx){
-    var glb=TREE_GLBS[idx%TREE_GLBS.length];
-    loader.load(BASE+glb,function(gltf){
-      try{
-        var m=gltf.scene||gltf.scenes[0];
-        m.position.copy(old.position);
-        m.rotation.y=Math.random()*Math.PI*2;
-        var sc=0.8+Math.random()*0.6;
-        m.scale.setScalar(sc);
-        m.traverse(function(c){ if(c.isMesh) c.castShadow=true; });
-        if(old.parent){ old.parent.add(m); old.parent.remove(old); }
-        tPlaced++;
-        showMsg('perfect: houses '+hPlaced+'/'+HOUSE_SPOTS.length+', trees '+tPlaced+'/'+trees.length);
-        if(tPlaced===trees.length) showMsg('perfect: DONE - all replaced');
-      }catch(e){}
-    },undefined,function(){ tPlaced++; });
-  });
+  if(newTrees.length>0){
+    showMsg('perfect: replacing '+newTrees.length+' trees...');
+    newTrees.forEach(function(old,idx){
+      var glb=TREE_GLBS[(idx+treeQueue.length)%TREE_GLBS.length];
+      loader.load(BASE+glb,function(gltf){
+        try{
+          var m=gltf.scene||gltf.scenes[0];
+          m.position.copy(old.position);
+          m.rotation.y=Math.random()*Math.PI*2;
+          m.scale.setScalar(0.8+Math.random()*0.6);
+          m.traverse(function(c){ if(c.isMesh) c.castShadow=true; });
+          if(old.parent){ old.parent.add(m); old.parent.remove(old); }
+        }catch(e){}
+      },undefined,function(){});
+    });
+    treeQueue=treeQueue.concat(newTrees);
+    showMsg('perfect: '+treeQueue.length+' trees replaced total');
+  }
   
   return true;
 }
