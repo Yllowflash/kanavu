@@ -19,14 +19,33 @@ if(window.THREE && window.THREE.PlaneGeometry){
   window.THREE.PlaneGeometry.prototype = OrigPlane.prototype;
 }
 
-// 2. After game loads, lower terrain under bridge
+// 2. After game loads, find the REAL bridge and lower terrain under it
 var done=false;
 function fixBridge(){
   var W=null;
   try{ W=window.__kvWorld; }catch(e){}
   if(!W||!W.scene) return false;
   if(done) return true;
+
+  // Find bridge: long narrow group (deck + ropes + towers)
+  var bridge=null, bestLen=0;
+  W.scene.traverse(function(obj){
+    if(!obj.isGroup||obj.children.length<4) return;
+    try{
+      var box=new window.THREE.Box3().setFromObject(obj);
+      var size=new window.THREE.Vector3(); box.getSize(size);
+      var center=new window.THREE.Vector3(); box.getCenter(center);
+      var len=Math.max(size.x, size.z);
+      var wid=Math.min(size.x, size.z);
+      // Bridge: long (>12), narrow (<10), near ground level
+      if(len>12&&len>bestLen&&wid<10&&center.y<8){
+        bestLen=len; bridge={center:center, size:size};
+      }
+    }catch(e){}
+  });
+  if(!bridge) return false; // try again next tick
   done=true;
+
   // Find terrain (largest PlaneGeometry mesh)
   var terrain=null, maxN=0;
   W.scene.traverse(function(obj){
@@ -36,20 +55,24 @@ function fixBridge(){
     }
   });
   if(!terrain) return false;
-  // Lower vertices near bridge (0, 16) to below water
+
+  // Lower terrain along the bridge span
   var pos=terrain.geometry.attributes.position;
-  var bx=0, bz=16, radius=25;
+  var bx=bridge.center.x, bz=bridge.center.z;
+  var blen=Math.max(bridge.size.x, bridge.size.z);
+  var bwid=Math.min(bridge.size.x, bridge.size.z);
+  // Bridge direction: along longer axis
+  var alongX = bridge.size.x >= bridge.size.z;
+  var halfLen=blen/2+8, halfWid=bwid/2+10;
   for(var i=0;i<pos.count;i++){
     var vx=pos.getX(i), vz=pos.getZ(i);
-    // Account for terrain position/scale
     var wx=terrain.position.x + vx*terrain.scale.x;
     var wz=terrain.position.z + vz*terrain.scale.z;
-    var d=Math.sqrt((wx-bx)*(wx-bx)+(wz-bz)*(wz-bz));
-    if(d<radius){
+    var dx=Math.abs(wx-bx), dz=Math.abs(wz-bz);
+    var inSpan = alongX ? (dx<halfLen&&dz<halfWid) : (dz<halfLen&&dx<halfWid);
+    if(inSpan){
       var y=pos.getY(i);
-      // Lower to -1 (below water at 0)
-      var factor=1-(d/radius);
-      pos.setY(i, y - (y+1)*factor);
+      if(y>-0.5){ pos.setY(i, -1.2); }
     }
   }
   pos.needsUpdate=true;
