@@ -172,9 +172,30 @@ function run(){
     }
   }catch(e){}
   
-  // 6. Restore original island bounds (260 instead of 380)
-  // Clamp player to radius 125 (original playable area)
+  // 6. Restore original island visual size (260 instead of 380)
+  // Paint outer ring as water, clamp player to radius 125
   try{
+    // Visual: make terrain beyond 130 look like water
+    W.scene.traverse(function(obj){
+      if(obj.isMesh&&obj.geometry&&obj.geometry.attributes&&obj.geometry.attributes.position&&obj.geometry.attributes.color){
+        var pos=obj.geometry.attributes.position;
+        var col=obj.geometry.attributes.color;
+        if(pos.count<500) return;
+        var modified=false;
+        var water=new window.THREE.Color(0x2a6a9a);
+        for(var i=0;i<pos.count;i++){
+          var vx=pos.getX(i), vz=pos.getZ(i);
+          var wx=obj.position.x+vx, wz=obj.position.z+vz;
+          var d=Math.sqrt(wx*wx+wz*wz);
+          if(d>130){
+            col.setXYZ(i, water.r, water.g, water.b);
+            modified=true;
+          }
+        }
+        if(modified){ col.needsUpdate=true; }
+      }
+    });
+    // Physical: clamp player
     if(W.player){
       setInterval(function(){
         try{
