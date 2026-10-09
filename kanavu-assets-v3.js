@@ -480,5 +480,18 @@ setInterval(function(){ try{ sweep(); }catch(_){} }, 3000);
 setTimeout(function(){ try{ villageHardReplace(); }catch(_){} }, 12000);
 log('v3 wiring active');
 
+// TEMP DEBUG overlay 2026-10-09: show swap stats on screen so user can report
+try{
+  var dbg = document.createElement('div');
+  dbg.id = 'kv-v3-debug';
+  dbg.style.cssText = 'position:fixed;top:8px;left:8px;z-index:99999;background:rgba(0,0,0,0.7);color:#0f0;font:11px monospace;padding:6px 8px;border-radius:6px;pointer-events:none;';
+  document.body.appendChild(dbg);
+  setInterval(function(){
+    try{
+      dbg.textContent = 'v3: swept='+stats.swept+' swapped='+stats.swapped+' failed='+stats.failed+' blocked='+stats.blocked+' skipped='+stats.skipped;
+    }catch(_){}
+  }, 1000);
+}catch(_){}
+
 } // end init(W)
 }();
