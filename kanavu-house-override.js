@@ -76,12 +76,12 @@ var attempts=0;
 var timer=setInterval(function(){
   attempts++;
   try{
-    if(replaceHouses()||attempts>120){
-      clearInterval(timer);
-      if(attempts>120) showMsg('house-override: timed out');
-    }
+    // Keep scanning continuously — don't stop after first success
+    // Houses may load after the script runs
+    replaceHouses();
+    if(attempts>120) clearInterval(timer);
   }catch(e){}
-},1000);
+},2000);
 // Also try immediately
 setTimeout(function(){ try{ replaceHouses(); }catch(e){} }, 3000);
 // Show immediately on load so user knows script is running
