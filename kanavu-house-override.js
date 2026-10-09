@@ -40,16 +40,33 @@ function replaceHouses(){
   try{ W=window.__kvWorld; }catch(e){}
   if(!W||!W.scene||!window.THREE||!window.THREE.GLTFLoader) return false;
   
-  showMsg('house-override: scanning...');
-  var loader=new window.THREE.GLTFLoader();
-  var replaced=0;
   var toReplace=[];
+  var boxCount=0, coneCount=0, groupCount=0;
   
   W.scene.traverse(function(obj){
-    if(isOldHouse(obj)) toReplace.push(obj);
+    if(!obj.isGroup) return;
+    groupCount++;
+    var hasBox=false, hasCone=false;
+    var size=new window.THREE.Vector3();
+    try{
+      var box=new window.THREE.Box3().setFromObject(obj);
+      box.getSize(size);
+    }catch(e){ return; }
+    // Size filter
+    if(size.x>7||size.z>7||size.y>5) return;
+    if(size.x<1.5||size.z<1.5||size.y<1.5) return;
+    
+    obj.traverse(function(c){
+      if(c.isMesh&&c.geometry){
+        var t=c.geometry.type||'';
+        if(t.indexOf('Box')>=0){ hasBox=true; boxCount++; }
+        if(t.indexOf('Cone')>=0){ hasCone=true; coneCount++; }
+      }
+    });
+    if(hasBox&&hasCone) toReplace.push(obj);
   });
   
-  showMsg('house-override: found '+toReplace.length+' old houses');
+  showMsg('scan: '+groupCount+' groups, '+toReplace.length+' houses (box:'+boxCount+' cone:'+coneCount+')');
   
   toReplace.forEach(function(old,idx){
     var url=BASE+((idx%2===0)?'village/house-teal-1.glb':'village/house-stone.glb');
