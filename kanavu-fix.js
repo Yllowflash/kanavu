@@ -67,8 +67,8 @@ function fixBridge(){
     var pos=terrain.geometry.attributes.position;
     var bx=bridge.center.x, bz=bridge.center.z;
     var alongX = bridge.size.x >= bridge.size.z;
-    var halfLen=Math.max(bridge.size.x,bridge.size.z)/2+6;
-    var halfWid=Math.min(bridge.size.x,bridge.size.z)/2+8;
+    var halfLen=Math.max(bridge.size.x,bridge.size.z)/2+15;
+    var halfWid=Math.min(bridge.size.x,bridge.size.z)/2+12;
     var sx=terrain.scale.x||1, sz=terrain.scale.z||1;
     var ox=terrain.position.x||0, oz=terrain.position.z||0;
     for(var i=0;i<pos.count;i++){
