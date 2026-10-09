@@ -142,36 +142,43 @@ function run(){
   // Find rope bridge and lower terrain beneath it
   try{
     var bridge=null;
+    var candidates=[];
     W.scene.traverse(function(obj){
-      if(bridge) return;
-      // Bridge is a Group with planks (Box) in a line
       if(obj.isGroup){
-        var box=new window.THREE.Box3().setFromObject(obj);
-        var size=new window.THREE.Vector3(); box.getSize(size);
-        // Bridge is long and narrow: ~20+ long, ~3 wide
-        if(size.x>15&&size.z<6&&size.y<5) bridge=obj;
-        else if(size.z>15&&size.x<6&&size.y<5) bridge=obj;
+        try{
+          var box=new window.THREE.Box3().setFromObject(obj);
+          var size=new window.THREE.Vector3(); box.getSize(size);
+          // Log large groups for debugging
+          if((size.x>10||size.z>10)&&size.y<8){
+            candidates.push({sx:size.x.toFixed(1), sz:size.z.toFixed(1), sy:size.y.toFixed(1), x:obj.position.x.toFixed(1), z:obj.position.z.toFixed(1)});
+          }
+          // Bridge is long and narrow
+          if(size.x>12&&size.z<8&&size.y<6) bridge=obj;
+          else if(size.z>12&&size.x<8&&size.y<6) bridge=obj;
+        }catch(e){}
       }
     });
+    // If bridge found, lower terrain under it
     if(bridge){
       var bb=new window.THREE.Box3().setFromObject(bridge);
-      // Lower terrain vertices under bridge to deep water
+      var lowered=0;
       W.scene.traverse(function(obj){
         if(obj.isMesh&&obj.geometry&&obj.geometry.attributes&&obj.geometry.attributes.position){
           var pos=obj.geometry.attributes.position;
           var modified=false;
+          // Only modify terrain (large meshes with many vertices)
+          if(pos.count<100) return;
           for(var i=0;i<pos.count;i++){
             var vx=pos.getX(i), vy=pos.getY(i), vz=pos.getZ(i);
-            // Convert to world coords (assuming terrain at origin)
             var wx=obj.position.x+vx, wz=obj.position.z+vz;
-            if(wx>bb.min.x-2&&wx<bb.max.x+2&&wz>bb.min.z-2&&wz<bb.max.z+2){
-              if(vy>-0.5&&vy<1.0){
-                pos.setY(i,-1.2);
-                modified=true;
+            if(wx>bb.min.x-3&&wx<bb.max.x+3&&wz>bb.min.z-3&&wz<bb.max.z+3){
+              if(vy>-1&&vy<1.0){
+                pos.setY(i,-1.5);
+                modified=true; lowered++;
               }
             }
           }
-          if(modified){ pos.needsUpdate=true; obj.geometry.computeVertexNormals(); }
+          if(modified){ pos.needsUpdate=true; try{ obj.geometry.computeVertexNormals(); }catch(e){} }
         }
       });
     }
