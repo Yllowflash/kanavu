@@ -138,6 +138,45 @@ function run(){
     }
   }
   
+  // 5. Carve water under bridge (remove sand)
+  // Find rope bridge and lower terrain beneath it
+  try{
+    var bridge=null;
+    W.scene.traverse(function(obj){
+      if(bridge) return;
+      // Bridge is a Group with planks (Box) in a line
+      if(obj.isGroup){
+        var box=new window.THREE.Box3().setFromObject(obj);
+        var size=new window.THREE.Vector3(); box.getSize(size);
+        // Bridge is long and narrow: ~20+ long, ~3 wide
+        if(size.x>15&&size.z<6&&size.y<5) bridge=obj;
+        else if(size.z>15&&size.x<6&&size.y<5) bridge=obj;
+      }
+    });
+    if(bridge){
+      var bb=new window.THREE.Box3().setFromObject(bridge);
+      // Lower terrain vertices under bridge to deep water
+      W.scene.traverse(function(obj){
+        if(obj.isMesh&&obj.geometry&&obj.geometry.attributes&&obj.geometry.attributes.position){
+          var pos=obj.geometry.attributes.position;
+          var modified=false;
+          for(var i=0;i<pos.count;i++){
+            var vx=pos.getX(i), vy=pos.getY(i), vz=pos.getZ(i);
+            // Convert to world coords (assuming terrain at origin)
+            var wx=obj.position.x+vx, wz=obj.position.z+vz;
+            if(wx>bb.min.x-2&&wx<bb.max.x+2&&wz>bb.min.z-2&&wz<bb.max.z+2){
+              if(vy>-0.5&&vy<1.0){
+                pos.setY(i,-1.2);
+                modified=true;
+              }
+            }
+          }
+          if(modified){ pos.needsUpdate=true; obj.geometry.computeVertexNormals(); }
+        }
+      });
+    }
+  }catch(e){}
+  
   return true;
 }
 
