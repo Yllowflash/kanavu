@@ -1,0 +1,26 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8" />
+<meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no" />
+<title>Kanavu — Fresh World</title>
+<style>
+  *{margin:0;padding:0;box-sizing:border-box}
+  html,body{height:100%;overflow:hidden;background:#0b1026;font-family:Georgia,serif}
+  #scene{position:fixed;inset:0}
+  #scene canvas{display:block}
+  #hud{position:fixed;top:14px;left:18px;color:#f4efff;z-index:10;pointer-events:none}
+  #hud h1{font-size:20px;letter-spacing:.3em;font-weight:400}
+  #hud .sub{font-size:12px;opacity:.6;letter-spacing:.2em;margin-top:4px;font-style:italic}
+  #hint{position:fixed;bottom:20px;left:50%;transform:translateX(-50%);color:rgba(244,239,255,.7);
+    font-size:13px;letter-spacing:.15em;z-index:10;pointer-events:none;font-style:italic}
+</style>
+</head>
+<body>
+<div id="scene"></div>
+<div id="hud"><h1>Kanavu</h1><div class="sub">fresh world</div></div>
+<div id="hint">WASD / left stick to walk · drag to look</div>
+<script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="kanavu-fresh.js?v=1"></script>
+</body>
+</html>
