@@ -295,7 +295,8 @@ window.KVDelMem=function(i){
 var KV_SHOP=[
   {n:'Straw Hat', e:'👒', c:10}, {n:'Ribbon Bow', e:'🎀', c:15},
   {n:'Star Wand', e:'⭐', c:20}, {n:'Backpack', e:'🎒', c:25},
-  {n:'Flower Earrings', e:'🌸', c:15}, {n:'High Ponytail', e:'💇', c:12}
+  {n:'Flower Earrings', e:'🌸', c:15}, {n:'High Ponytail', e:'💇', c:12},
+  {n:'Jetpack', e:'🚀', c:100, jetpack:true}
 ];
 function getStars(){ try{ return parseInt(localStorage.getItem('kanavu_stars')||'0'); }catch(e){ return 0; } }
 function setStars(s){ try{ localStorage.setItem('kanavu_stars', String(s)); }catch(e){} }
@@ -323,6 +324,11 @@ window.KVBuy=function(i){
   setStars(stars-it.c);
   owned.push(it.n);
   try{ localStorage.setItem('kanavu_owned', JSON.stringify(owned)); }catch(e){}
+  // Jetpack: unlock permanent flight
+  if(it.jetpack){
+    try{ localStorage.setItem('kanavu_jetpack', '1'); }catch(e){}
+    alert('🚀 Jetpack unlocked! You can now fly anytime!');
+  }
   openShop();
 };
 
