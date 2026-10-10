@@ -99,6 +99,35 @@ window.KVSetAvatar=function(gender){
   }catch(e){}
 };
 
+// Inject avatar switch into settings panel
+function injectSettings(){
+  try{
+    // Watch for settings panel to appear
+    var obs=new MutationObserver(function(muts){
+      muts.forEach(function(m){
+        m.addedNodes.forEach(function(node){
+          if(node.nodeType!==1) return;
+          // Look for settings panel (contains "Settings" text or gear icon)
+          var txt=(node.textContent||'').toLowerCase();
+          if(txt.indexOf('settings')!==-1 && !node.querySelector('#kv-avatar-setting')){
+            // Found settings panel, add avatar section
+            var div=document.createElement('div');
+            div.id='kv-avatar-setting';
+            div.style.cssText='margin:12px 0;padding:12px;border-top:1px solid rgba(255,255,255,.1);';
+            var cur=getAvatarChoice();
+            div.innerHTML='<div style="font-weight:bold;margin-bottom:8px;">Character</div>'+
+              '<button onclick="KVSetAvatar(\'male\')" style="padding:8px 16px;margin-right:8px;border-radius:8px;border:'+(cur==='male'?'2px solid #ffd9ec':'1px solid rgba(255,255,255,.3)')+';background:'+(cur==='male'?'rgba(255,217,236,.2)':'transparent')+';color:#fff;cursor:pointer;">👨 Male</button>'+
+              '<button onclick="KVSetAvatar(\'female\')" style="padding:8px 16px;border-radius:8px;border:'+(cur==='female'?'2px solid #ffd9ec':'1px solid rgba(255,255,255,.3)')+';background:'+(cur==='female'?'rgba(255,217,236,.2)':'transparent')+';color:#fff;cursor:pointer;">👩 Female</button>';
+            node.appendChild(div);
+          }
+        });
+      });
+    });
+    obs.observe(document.body, {childList:true, subtree:true});
+  }catch(e){}
+}
+setTimeout(injectSettings, 3000);
+
 var n=0;
 var t=setInterval(function(){
   n++;
