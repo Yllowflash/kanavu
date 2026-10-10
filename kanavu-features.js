@@ -227,6 +227,36 @@ function showModal(title, html){
 
 function init(W){
   SITES.forEach(function(s){ makeBuilding(s, W); });
+  // Tap detection via renderer canvas
+  try{
+    var cv = W.renderer && W.renderer.domElement;
+    if(cv){
+      var ray = new THREE.Raycaster();
+      var ptr = new THREE.Vector2();
+      cv.addEventListener('pointerdown', function(e){
+        // Only handle taps (not drags) - check after short delay
+        var sx=e.clientX, sy=e.clientY;
+        setTimeout(function(){
+          // Simple: if it was a tap (no significant move), check buildings
+          ptr.x = (sx/window.innerWidth)*2-1;
+          ptr.y = -(sy/window.innerHeight)*2+1;
+          ray.setFromCamera(ptr, W.camera);
+          // Check each building (sphere at building center)
+          for(var i=0;i<SITES.length;i++){
+            var s=SITES[i];
+            var ax=s._ax||s.x, az=s._az||s.z;
+            var gy=W.groundY(ax,az);
+            var bp=new THREE.Vector3(ax, gy+2, az);
+            var dist=ray.ray.distanceToPoint(bp);
+            if(dist<4){
+              openFeature(s.id);
+              break;
+            }
+          }
+        }, 150);
+      });
+    }
+  }catch(e){}
 }
 
 var n=0;
