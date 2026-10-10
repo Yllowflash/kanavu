@@ -7,10 +7,12 @@
 "use strict";
 
 var SITES = [
-  {id:'bookshop', x:-14, z:-8,  ry:1.19, name:'Bookshop',  color:0xf6ead2, roof:0x2e8f8a, label:'📚 Bookshop'},
-  {id:'theatre',  x:-6,  z:-16, ry:0.5,  name:'Theatre',   color:0xd8cfc0, roof:0x8a3a3a, label:'🎭 Theatre'},
-  {id:'cottage',  x:-20, z:-18, ry:0.3,  name:'Memories',  color:0xe8dcc8, roof:0x6a8a5a, label:'🏡 Memory Cottage'},
-  {id:'shop',     x:-10, z:2,   ry:-0.6, name:'Shop',      color:0xf0d8e8, roof:0x8a5aa0, label:'🛍️ Shop'}
+  // Left open space (west)
+  {id:'bookshop', x:-38, z:-12, ry:1.19, name:'Bookshop',  color:0xf6ead2, roof:0x2e8f8a, label:'📚 Bookshop'},
+  {id:'shop',     x:-28, z:-20, ry:-0.6, name:'Shop',      color:0xf0d8e8, roof:0x8a5aa0, label:'🛍️ Shop'},
+  // Right open space (north)
+  {id:'theatre',  x:10,  z:30,  ry:0.5,  name:'Theatre',   color:0xd8cfc0, roof:0x8a3a3a, label:'🎭 Theatre'},
+  {id:'cottage',  x:24,  z:38,  ry:0.3,  name:'Memories',  color:0xe8dcc8, roof:0x6a8a5a, label:'🏡 Memory Cottage'}
 ];
 
 var done=false;
