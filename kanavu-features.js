@@ -348,27 +348,33 @@ function init(W){
     if(cv){
       var ray = new THREE.Raycaster();
       var ptr = new THREE.Vector2();
+      var pd=null;
       cv.addEventListener('pointerdown', function(e){
-        // Only handle taps (not drags) - check after short delay
+        pd={x:e.clientX, y:e.clientY};
+      });
+      cv.addEventListener('pointerup', function(e){
+        if(!pd) return;
+        var dx=e.clientX-pd.x, dy=e.clientY-pd.y;
+        pd=null;
+        // Only if it was a tap (moved less than 10px)
+        if(Math.hypot(dx,dy)>10) return;
         var sx=e.clientX, sy=e.clientY;
-        setTimeout(function(){
-          // Simple: if it was a tap (no significant move), check buildings
-          ptr.x = (sx/window.innerWidth)*2-1;
-          ptr.y = -(sy/window.innerHeight)*2+1;
+        ptr.x = (sx/window.innerWidth)*2-1;
+        ptr.y = -(sy/window.innerHeight)*2+1;
           ray.setFromCamera(ptr, W.camera);
-          // Check each building (sphere at building center)
-          for(var i=0;i<SITES.length;i++){
-            var s=SITES[i];
-            var ax=s._ax||s.x, az=s._az||s.z;
-            var gy=W.groundY(ax,az);
-            var bp=new THREE.Vector3(ax, gy+2, az);
-            var dist=ray.ray.distanceToPoint(bp);
-            if(dist<4){
-              openFeature(s.id);
-              break;
-            }
+        // Check each building (sphere at building center)
+        ray.setFromCamera(ptr, W.camera);
+        for(var i=0;i<SITES.length;i++){
+          var s=SITES[i];
+          var ax=s._ax||s.x, az=s._az||s.z;
+          var gy=W.groundY(ax,az);
+          var bp=new THREE.Vector3(ax, gy+2, az);
+          var dist=ray.ray.distanceToPoint(bp);
+          if(dist<4){
+            openFeature(s.id);
+            break;
           }
-        }, 150);
+        }
       });
     }
   }catch(e){}
