@@ -28,12 +28,28 @@ function boot(){
 
 function mat(c){ return new THREE.MeshLambertMaterial({color:c}); }
 
+function findLand(W, x, z){
+  // Search outward for ground above water
+  if(W.groundY(x,z) > 1.2) return {x:x, z:z};
+  for(var r=5; r<60; r+=5){
+    for(var a=0; a<12; a++){
+      var nx=x+Math.cos(a/12*Math.PI*2)*r;
+      var nz=z+Math.sin(a/12*Math.PI*2)*r;
+      if(W.groundY(nx,nz) > 1.5) return {x:nx, z:nz};
+    }
+  }
+  return {x:x, z:z};
+}
+
 function makeBuilding(site, W){
   var T=window.THREE;
   var g=new T.Group();
-  var gy=W.groundY(site.x, site.z);
-  g.position.set(site.x, gy, site.z);
+  var spot=findLand(W, site.x, site.z);
+  var gy=W.groundY(spot.x, spot.z);
+  g.position.set(spot.x, gy, spot.z);
   g.rotation.y=site.ry||0;
+  // Store actual position for tap detection
+  site._ax=spot.x; site._az=spot.z;
 
   // Main structure
   var walls=new T.Mesh(new T.BoxGeometry(5.5,3.4,4.5), mat(site.color));
@@ -109,12 +125,13 @@ function makeBuilding(site, W){
 
   W.scene.add(g);
 
-  // Tap handler
+  // Tap handler (uses actual placed position)
   if(W.onTap){
     try{
       W.onTap(function(hit){
         if(!hit||!hit.point) return false;
-        var dx=hit.point.x-site.x, dz=hit.point.z-site.z;
+        var ax=site._ax||site.x, az=site._az||site.z;
+        var dx=hit.point.x-ax, dz=hit.point.z-az;
         if(Math.hypot(dx,dz)<5){
           openFeature(site.id);
           return true;
@@ -123,9 +140,12 @@ function makeBuilding(site, W){
       });
     }catch(e){}
   }
-  // Proximity: also open via collider
+  // Proximity collider (uses actual position)
   if(W.staticColliders){
-    try{ W.staticColliders.push({x:site.x, z:site.z, r:4.5, feature:site.id}); }catch(e){}
+    try{
+      var ax2=site._ax||site.x, az2=site._az||site.z;
+      W.staticColliders.push({x:ax2, z:az2, r:4.5, feature:site.id});
+    }catch(e){}
   }
 }
 
