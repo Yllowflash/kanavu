@@ -78,23 +78,29 @@ var ISLAND = 260, SEG = 180;
 
 function terrainHeight(x, z){
   var d = Math.sqrt(x*x + z*z);
-  // Base island: raised center, falling to water at edge
+  // Main island: raised center, falling to water at edge
   var h = 6 * Math.max(0, 1 - Math.pow(d/120, 2));
   // Hills
   h += 3.5 * Math.max(0, 1 - Math.pow(Math.hypot(x+45, z-40)/35, 2));
   h += 2.5 * Math.max(0, 1 - Math.pow(Math.hypot(x-50, z+45)/30, 2));
   // Gentle noise
   h += Math.sin(x*0.08)*Math.cos(z*0.07)*0.8 + Math.sin(x*0.21+z*0.13)*0.35;
-  // Water channel for bridge along z-axis at x=0: carve to -2
-  var chanW = 10; // half-width
-  if(Math.abs(x) < chanW + 8){
-    var f = 1 - Math.min(1, Math.abs(x)/ (chanW+8));
-    f = f*f*(3-2*f);
-    h = h*(1-f) + (-2.2)*f;
+
+  // Second island (the "other side") at (0, 75), radius ~28
+  var d2 = Math.hypot(x, z-75);
+  var h2 = 4 * Math.max(0, 1 - Math.pow(d2/28, 2));
+  h2 += Math.sin(x*0.15)*Math.cos((z-75)*0.12)*0.5;
+  h = Math.max(h, h2);
+
+  // Water everywhere else (ocean floor)
+  // Blend: if both h and h2 are low, it's water
+  if(d > 125 && d2 > 35){
+    h = -3 - Math.min(d-125, d2-35)*0.1;
   }
-  // Ocean floor beyond island
-  if(d > 125){
-    h = -3 - (d-125)*0.1;
+  // Ensure water gap between islands (bridge spans it)
+  // Gap is around z=35-50 at x=0
+  if(Math.abs(x) < 12 && z > 30 && z < 58){
+    h = -2.2; // water channel for bridge
   }
   return h;
 }
@@ -162,7 +168,7 @@ var water;
   var ropeMat = new THREE.MeshLambertMaterial({color:0xd9c39a});
   var teal = new THREE.MeshLambertMaterial({color:0x2a8a8a});
 
-  var z0=-22, z1=22, deckY=2.2;
+  var z0=26, z1=62, deckY=2.2;
   // Planks
   for(var z=z0; z<=z1; z+=1.1){
     var p = new THREE.Mesh(new THREE.BoxGeometry(3.2, 0.18, 1.0), wood);
@@ -300,7 +306,7 @@ var player = new THREE.Group();
     arm.name = 'arm'+(x<0?'L':'R');
     player.add(arm);
   });
-  player.position.set(0, groundY(0, 30), 30);
+  player.position.set(0, groundY(0, 18), 18);
   scene.add(player);
 })();
 
