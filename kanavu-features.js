@@ -204,13 +204,6 @@ function showModal(title, html){
 }
 
 function init(W){
-  // TEST: huge red sphere at spawn - remove after confirming script runs
-  try{
-    var test=new THREE.Mesh(new THREE.SphereGeometry(5,12,12),
-      new THREE.MeshBasicMaterial({color:0xff0000}));
-    test.position.set(0, 15, 20);
-    W.scene.add(test);
-  }catch(e){}
   SITES.forEach(function(s){ makeBuilding(s, W); });
 }
 
