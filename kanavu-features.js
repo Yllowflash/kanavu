@@ -17,7 +17,10 @@ var done=false;
 function boot(){
   var W=null;
   try{ W=window.__kvWorld; }catch(e){}
-  if(!W||!W.scene||!W.groundY||!W.player||!window.THREE) return false;
+  if(!W||!W.scene||!window.THREE) return false;
+  // Old game uses terrainY, newer uses groundY
+  if(!W.groundY && W.terrainY) W.groundY = W.terrainY;
+  if(!W.groundY||!W.player) return false;
   if(done) return true;
   done=true;
   init(W);
