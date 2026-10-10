@@ -308,7 +308,7 @@ function buildGrassChunk(ch){
     if(g < 0.35 || g > 13.5) continue;
     if(slopeAt(x,z) > 0.62) continue;
     if(inExclude(x,z)) continue;
-    if(ch.chunkNearPath && nearPath(x,z,1.7)) continue;
+    if(ch.chunkNearPath && nearPath(x,z,3.5)) continue;
     var dens = grassDensity(x,z,g)* (0.55+0.45*qg);
     if(sRnd(seed+k*13.3) > dens) continue;
     _p.set(x, g-0.05, z);
@@ -537,7 +537,7 @@ function buildDapple(){
     var a = sRnd(seed+k)*Math.PI*2, r = 6+Math.sqrt(sRnd(seed+k+99))*24;
     var x = 20+Math.cos(a)*r, z = -28+Math.sin(a)*r*0.85;
     var g = W.groundY(x,z);
-    if(g<0.4 || slopeAt(x,z)>0.6 || nearPath(x,z,1.2)) continue;
+    if(g<0.4 || slopeAt(x,z)>0.6 || nearPath(x,z,3.0)) continue;
     spots.push([x,g+0.09,z, 1.2+sRnd(seed+k+7)*1.8]);
   }
   if(!spots.length) return;
