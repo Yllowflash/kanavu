@@ -191,8 +191,8 @@ var PLAYER_SPEED = 185;          /* world units / second */
 var INTERACT_R = { star: 58, beacon: 82, campfire: 82, partner: 90 };
 
 /* Island ellipses + bridge */
-var HIS  = { cx: 215, cy: 570, rx: 165, ry: 295, name: 'His island' };
-var HERS = { cx: 585, cy: 570, rx: 165, ry: 295, name: 'Her island' };
+var HIS  = { cx: 200, cy: 570, rx: 185, ry: 330, name: 'His island' };
+var HERS = { cx: 600, cy: 570, rx: 185, ry: 330, name: 'Her island' };
 var BRIDGE = { x: 348, y: 518, w: 104, h: 104 };   /* walkable planks */
 
 function inEllipse(x, y, e) {
