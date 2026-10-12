@@ -94,18 +94,29 @@ var Sprites = {
 function loadSprites(basePath) {
   basePath = basePath || '';
   var defs = [
-    { key: 'adi-stand', slot: 'adi', idx: 0 },
-    { key: 'adi-walk-a', slot: 'adi', idx: 1 },
-    { key: 'adi-walk-b', slot: 'adi', idx: 2 },
-    { key: 'adi-walk-c', slot: 'adi', idx: 3 },
-    { key: 'tara-front', slot: 'tara', idx: 0 }
+    { key: 'boy-walk', slot: 'adi', sheet: true },
+    { key: 'girl-walk', slot: 'tara', sheet: true }
   ];
   Sprites.total = defs.length;
   defs.forEach(function (d) {
     var img = new Image();
     img.onload = function () {
-      if (d.slot === 'adi') Sprites.adi[d.idx] = img;
-      else Sprites.tara = img;
+      // Slice 4-frame horizontal sheet into individual frames
+      var fw = Math.floor(img.width / 4);
+      for (var i = 0; i < 4; i++) {
+        var c = document.createElement('canvas');
+        c.width = fw; c.height = img.height;
+        var g = c.getContext('2d');
+        g.drawImage(img, i * fw, 0, fw, img.height, 0, 0, fw, img.height);
+        var frame = new Image();
+        frame.src = c.toDataURL();
+        if (d.slot === 'adi') Sprites.adi[i] = frame;
+        else {
+          if (!Sprites.taraFrames) Sprites.taraFrames = [];
+          Sprites.taraFrames[i] = frame;
+          if (i === 1) Sprites.tara = frame; // stand frame
+        }
+      }
       Sprites.loaded++;
       if (Sprites.loaded >= Sprites.total) {
         Sprites.ready = true;
@@ -835,6 +846,13 @@ function drawKeeper(ctx, k, t) {
         if (fi === 3 && Sprites.adi[3]) img = Sprites.adi[3];
       } else {
         img = Sprites.adi[0];
+      }
+    } else if (!isAdi && Sprites.taraFrames && Sprites.taraFrames.length) {
+      if (moving) {
+        var fi2 = Math.floor(t * 9 + k.ph) % 4;
+        img = Sprites.taraFrames[[0, 1, 0, 2][fi2]] || Sprites.taraFrames[1];
+      } else {
+        img = Sprites.taraFrames[1] || Sprites.tara;
       }
     } else if (!isAdi && Sprites.tara) {
       img = Sprites.tara;
