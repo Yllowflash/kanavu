@@ -1965,6 +1965,7 @@ function init(canvasId) {
   partner.position.set(pStartX, groundHeight(pStartX, pStartZ), pStartZ);
   scene.add(player); scene.add(partner);
   var playerYaw = 0, targetYaw = 0, partnerYaw = 0;
+  var playerMovingState = false; // Phase 5: tracked for network sync
   partnerYaw = Math.atan2(startX - pStartX, startZ - pStartZ);
   partner.rotation.y = partnerYaw;
 
@@ -2006,6 +2007,25 @@ function init(canvasId) {
 
   /* ---------------- partner (Tara) AI ---------------- */
   var partnerOnline = true, partnerSeeking = true;
+  /* Phase 5 multiplayer: when partnerRemote is true, the partner rig is driven
+     by network state instead of the follow AI. setPartnerNet() feeds target
+     transform; updatePartner lerps toward it for smoothness. */
+  var partnerRemote = false;
+  var partnerNet = { x: 0, y: 0, z: 0, yaw: 0, moving: false, sitting: false, t: 0 };
+  function setPartnerRemote(b) {
+    partnerRemote = !!b;
+    if (!partnerRemote) partnerSeeking = true; // resume AI cleanly
+  }
+  function setPartnerNet(x, y, z, yaw, moving, sitting) {
+    partnerNet.x = x; partnerNet.y = y; partnerNet.z = z;
+    partnerNet.yaw = yaw;
+    partnerNet.moving = !!moving;
+    partnerNet.sitting = !!sitting;
+    partnerNet.t = performance.now();
+  }
+  function isPartnerStale() {
+    return performance.now() - partnerNet.t > 5000; // no update in 5s
+  }
   var porchB = (function () { // her island's Couple's House porch (offline spot)
     for (var i = 0; i < BUILDINGS.length; i++) {
       var b = BUILDINGS[i];
@@ -2022,6 +2042,24 @@ function init(canvasId) {
   }
   function updatePartner(dt, t) {
     var pp = partner.position;
+    /* Phase 5: remote-driven partner — lerp toward network state, bypass AI */
+    if (partnerRemote && !isPartnerStale()) {
+      var k = 1 - Math.exp(-dt * 12); // snappy but smooth
+      pp.x = lerp(pp.x, partnerNet.x, k);
+      pp.z = lerp(pp.z, partnerNet.z, k);
+      var gy = walkHeight(pp.x, pp.z);
+      var targetY = partnerNet.y > -900 ? partnerNet.y : (gy > -900 ? gy : pp.y);
+      pp.y = lerp(pp.y, targetY, k);
+      // smooth yaw toward network yaw
+      var dy = partnerNet.yaw - partnerYaw;
+      while (dy > Math.PI) dy -= Math.PI * 2;
+      while (dy < -Math.PI) dy += Math.PI * 2;
+      partnerYaw += dy * (1 - Math.exp(-dt * 10));
+      partner.rotation.y = partnerYaw;
+      if (partnerNet.sitting) applySitPose(partnerRig, dt, -0.55);
+      else updateCharacterAnim(partnerRig, dt, t, partnerNet.moving, 10.2);
+      return;
+    }
     if (partnerHold) { // Phase 4: sitting with the player at the campfire (AI paused)
       if (partnerSit && !partnerSit.seated) {
         var dx = partnerSit.x - pp.x, dz = partnerSit.z - pp.z, d = Math.hypot(dx, dz);
@@ -2782,6 +2820,7 @@ function init(canvasId) {
         player.rotation.y = playerYaw;
       }
     }
+    playerMovingState = moved; // Phase 5: expose for network sync
     var gy = walkHeight(player.position.x, player.position.z);
     if (!ridingWheel && gy > -900) player.position.y = lerp(player.position.y, gy, 1 - Math.exp(-dt * 10)); // Phase 4: gondola drives y
     if (ridingBike) updateBikeAnim(playerRig, dt, t, moved, speed); // Phase 4
@@ -2885,6 +2924,17 @@ function init(canvasId) {
     showPrompt: showPrompt,   // Phase 2 prompt API (also on E key / tap)
     hidePrompt: hidePrompt,
     setPartnerOnline: setPartnerOnline, // Phase 3: Tara follow (true) / porch idle (false)
+    setPartnerRemote: setPartnerRemote, // Phase 5: true = network drives partner rig
+    setPartnerNet: setPartnerNet,       // Phase 5: feed network transform
+    isPartnerRemote: function () { return partnerRemote; },
+    getPlayerAnim: function () {        // Phase 5: animation state for sync
+      return {
+        moving: playerMovingState,
+        sitting: !!sitting,
+        yaw: playerYaw
+      };
+    },
+    getPlayerYaw: function () { return playerYaw; },
     phase3: {                 // Phase 3 introspection / test hooks
       partnerPos: function () { return { x: partner.position.x, y: partner.position.y, z: partner.position.z }; },
       setPartner: function (x, z) { partner.position.set(x, partner.position.y, z); }, // Phase 4 test hook
