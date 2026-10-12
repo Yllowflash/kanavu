@@ -30,6 +30,10 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
 #world-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #loading{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(26,14,18,.85);color:#f5d9a8;font-size:18px;letter-spacing:.2em}
 #loading.visible{display:flex}
+#mp-btn{position:fixed;top:14px;right:14px;z-index:50;display:none;padding:10px 18px;border:1px solid rgba(245,200,110,.4);border-radius:999px;background:rgba(26,14,18,.65);color:#f5d9a8;font-family:inherit;font-size:14px;letter-spacing:.08em;cursor:pointer;backdrop-filter:blur(6px)}
+#mp-btn.visible{display:block}
+#mp-btn .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#666;margin-right:7px;vertical-align:1px}
+#mp-btn .dot.on{background:#a8e6a1;box-shadow:0 0 8px #a8e6a1}
 </style>
 </head>
 <body>
@@ -44,15 +48,22 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
 <div id="game-screen">
   <canvas id="world-canvas"></canvas>
 </div>
+<button id="mp-btn"><span class="dot" id="mp-dot"></span><span id="mp-label">Walk Together</span></button>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
+<script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
 <script src="kanavu-world.js?v=1"></script>
+<script src="kanavu-multiplayer.js?v=1"></script>
 <script>
 (function(){
   var beginBtn = document.getElementById('begin-btn');
   var titleScreen = document.getElementById('title-screen');
   var gameScreen = document.getElementById('game-screen');
   var loading = document.getElementById('loading');
+  var mpBtn = document.getElementById('mp-btn');
+  var mpDot = document.getElementById('mp-dot');
+  var mpLabel = document.getElementById('mp-label');
   var started = false;
+  var worldApi = null, mp = null;
   beginBtn.addEventListener('click', function(){
     if (started) return;
     started = true;
@@ -63,9 +74,38 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
     setTimeout(function(){
       try {
         if (window.KanavuWorld) {
-          KanavuWorld.init('world-canvas', {});
+          worldApi = KanavuWorld.init('world-canvas', {});
+          window.KanavuWorldApi = worldApi; // for console/debug
           gameScreen.classList.add('visible');
           loading.classList.remove('visible');
+          mpBtn.classList.add('visible');
+          // Init multiplayer (graceful if Supabase fails)
+          try {
+            if (window.KanavuMultiplayer) {
+              var savedName = '';
+              try { savedName = localStorage.getItem('kanavu_player_name') || ''; } catch (e) {}
+              mp = KanavuMultiplayer.init(worldApi, { playerName: savedName || 'Player' });
+              window.KanavuMP = mp;
+              mp.onPresence(function (p) {
+                mpDot.className = 'dot' + (p.online ? ' on' : '');
+                mpLabel.textContent = p.online ? ('With ' + (p.name || 'partner')) : 'Walk Together';
+              });
+              // Persist name changes
+              var origShow = mp.showUI.bind(mp);
+              mp.showUI = function () {
+                origShow();
+                var iv = setInterval(function () {
+                  var inp = document.getElementById('kvmp-name');
+                  if (inp) {
+                    clearInterval(iv);
+                    inp.addEventListener('change', function () {
+                      try { localStorage.setItem('kanavu_player_name', inp.value.trim()); } catch (e) {}
+                    });
+                  } else if (!document.getElementById('kv-mp-ui')) clearInterval(iv);
+                }, 300);
+              };
+            }
+          } catch (mpErr) { console.warn('[mp] init failed, solo mode:', mpErr); }
         } else {
           loading.textContent = 'failed to load — please reload';
         }
@@ -73,6 +113,10 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
         loading.textContent = 'something went wrong — please reload';
       }
     }, 100);
+  });
+  mpBtn.addEventListener('click', function () {
+    if (mp) mp.showUI();
+    else alert('Multiplayer is not available right now.');
   });
 })();
 </script>
