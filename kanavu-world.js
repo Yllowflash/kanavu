@@ -113,11 +113,58 @@ function onBridge(x, z) {
   return Math.abs(x) <= BRIDGE_HALF + 1.5 && Math.abs(z) <= BRIDGE_W / 2;
 }
 /* walkable surface height; returns -999 if not walkable (water) */
+var pierRects = []; // Phase 4: wooden piers are walkable {x0,x1,z0,z1,y}
 function walkHeight(x, z) {
+  var zn = zoneAt(x, z); // Phase 2: interior rooms override terrain
+  if (zn) return zn.y;
   if (onBridge(x, z) && Math.abs(x) <= BRIDGE_HALF) return bridgeDeckY(x);
+  for (var pi = 0; pi < pierRects.length; pi++) { // Phase 4: stroll the dock
+    var pr = pierRects[pi];
+    if (x >= pr.x0 && x <= pr.x1 && z >= pr.z0 && z <= pr.z1) return pr.y;
+  }
   var h = groundHeight(x, z);
   return h > 0.45 ? h : -999;
 }
+
+/* ================= Phase 2: building plots + interior zones ==============
+   Resolved once at load: each plot needs groundHeight >= 2.5, gentle slope,
+   and >= 14 units from other plots; nudged deterministically if not. */
+var interiorZones = []; // {x0,x1,z0,z1,y,room}
+function zoneAt(x, z) {
+  for (var i = 0; i < interiorZones.length; i++) {
+    var zn = interiorZones[i];
+    if (x >= zn.x0 && x <= zn.x1 && z >= zn.z0 && z <= zn.z1) return zn;
+  }
+  return null;
+}
+var BUILD_PLOTS_A = (function () {
+  var defs = [
+    ['bookshop', -90, -32], ['shop', -58, -20], ['theatre', -122, -20],
+    ['cottage', -56, 33], ['house', -122, 30]
+  ];
+  var out = [];
+  function ok(x, z) {
+    if (groundHeight(x, z) < 2.5 || groundSlope(x, z) > 0.6) return false;
+    for (var i = 0; i < out.length; i++)
+      if (Math.hypot(x - out[i].x, z - out[i].z) < 14) return false;
+    return true;
+  }
+  defs.forEach(function (d) {
+    var x = d[1], z = d[2];
+    if (!ok(x, z)) {
+      var done = false;
+      for (var r = 1; r <= 14 && !done; r++) {
+        for (var k = 0; k < 20 && !done; k++) {
+          var cx = x + Math.cos(k / 20 * Math.PI * 2) * r;
+          var cz = z + Math.sin(k / 20 * Math.PI * 2) * r;
+          if (ok(cx, cz)) { x = cx; z = cz; done = true; }
+        }
+      }
+    }
+    out.push({ type: d[0], x: Math.round(x * 10) / 10, z: Math.round(z * 10) / 10 });
+  });
+  return out;
+})();
 
 /* ========================= sky palette =================================== */
 var _skyTmp = {};
@@ -366,12 +413,45 @@ function init(canvasId) {
     }
     return pts;
   }
+  /* ---- Phase 4 plots: sky wheels, docks, cycle stands (resolved before scatter) ---- */
+  function findWheelPlot(cx, cz) { // nudge until groundHeight >= 2.5 & gentle slope
+    var x = cx, z = cz, done = false;
+    for (var r = 0; r <= 12 && !done; r++) {
+      for (var k = 0; k < 16 && !done; k++) {
+        var nx = cx + Math.cos(k / 16 * Math.PI * 2) * r, nz = cz + Math.sin(k / 16 * Math.PI * 2) * r;
+        if (groundHeight(nx, nz) >= 2.5 && groundSlope(nx, nz) <= 0.6) { x = nx; z = nz; done = true; }
+      }
+    }
+    return { x: x, z: z };
+  }
+  var WHEEL_A = findWheelPlot(ISL_A.cx, 42), WHEEL_B = findWheelPlot(ISL_B.cx, 42);
+  var STAND_A = { x: ISL_A.cx + 10, z: 10 }, STAND_B = { x: ISL_B.cx - 10, z: 10 };
+  var PIER_LEN = 14;
+  function findShore(cx, cz, dx, dz) { // march outward until ground dips below 0.6
+    var sx = cx + dx * 30, sz = cz + dz * 30;
+    for (var t = 30; t <= 75; t++) {
+      if (groundHeight(cx + dx * t, cz + dz * t) < 0.6) { sx = cx + dx * (t - 3); sz = cz + dz * (t - 3); break; }
+      sx = cx + dx * t; sz = cz + dz * t;
+    }
+    return { x: sx, z: sz, dx: dx, dz: dz };
+  }
+  var DOCK_A = findShore(ISL_A.cx, ISL_A.cz, 0, -1);
+  var DOCK_B = findShore(ISL_B.cx, ISL_B.cz, 0, -1);
   /* keep bridge corridor + campfire + future building plots clear */
   function clearOfFeatures(x, z) {
     if (Math.abs(z) < 10 && Math.abs(x) < 72) return true;   // bridge corridor
     if (Math.hypot(x - ISL_A.cx, z - ISL_A.cz) < 15) return true; // plaza A
     if (Math.hypot(x - ISL_B.cx, z - ISL_B.cz) < 15) return true; // plaza B
     if (Math.hypot(x + 70, z - 25) < 9) return true;          // campfire
+    if (Math.hypot(x - WHEEL_A.x, z - WHEEL_A.z) < 11) return true; // Phase 4 sky wheel
+    if (Math.hypot(x - WHEEL_B.x, z - WHEEL_B.z) < 11) return true;
+    if (Math.hypot(x - (DOCK_A.x + DOCK_A.dx * 7), z - (DOCK_A.z + DOCK_A.dz * 7)) < 8) return true; // pier
+    if (Math.hypot(x - (DOCK_B.x + DOCK_B.dx * 7), z - (DOCK_B.z + DOCK_B.dz * 7)) < 8) return true;
+    for (var i = 0; i < BUILD_PLOTS_A.length; i++) {          // Phase 2 building plots (mirrored)
+      var p = BUILD_PLOTS_A[i];
+      if (Math.hypot(x - p.x, z - p.z) < 8) return true;
+      if (Math.hypot(x + p.x, z - p.z) < 8) return true;
+    }
     return false;
   }
   /* premium low-poly tree: trunk + 2-3 foliage blobs (NOT cones) */
@@ -622,6 +702,1003 @@ function init(canvasId) {
     registerChunk(grp, campfirePos.x, campfirePos.z);
   })();
 
+  /* ================= PHASE 2: buildings + interiors =================
+     5 Pixar-style buildings x 2 mirrored islands, plus teleport interiors
+     far south over water (z=-400/-418). Shared canvas textures, merged
+     geometry per building, instanced repeated parts, one shader-driven
+     smoke cloud for all chimneys + kettle steam. */
+  var windowMats = [];    // night-glow materials (driven in updateDayNight)
+  var colliders = [];     // {x,z,r} building slide colliders
+  var interactables = []; // {x,z,r,label,action} prompt triggers
+  var rooms = [];         // interior rooms {cx,cz,lampLight}
+  var tvStates = [];
+
+  /* ---- canvas texture helper ---- */
+  function canvasTex(w, h, draw) {
+    var c = document.createElement('canvas'); c.width = w; c.height = h;
+    draw(c.getContext('2d'), w, h);
+    var t = new THREE.CanvasTexture(c);
+    t.colorSpace = THREE.SRGBColorSpace;
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    t.anisotropy = 4;
+    return t;
+  }
+  function plankBG(g, w, h, base) {
+    g.fillStyle = base; g.fillRect(0, 0, w, h);
+    var r = mulberry32(42), rows = 8, rh = h / rows;
+    for (var i = 0; i < rows; i++) {
+      var v = (r() - 0.5) * 22;
+      g.fillStyle = 'rgb(' + ((156 + v) | 0) + ',' + ((107 + v * 0.7) | 0) + ',' + ((65 + v * 0.5) | 0) + ')';
+      g.fillRect(0, i * rh, w, rh);
+      g.fillStyle = 'rgba(60,35,18,0.85)'; g.fillRect(0, i * rh, w, 2.5);
+      g.strokeStyle = 'rgba(90,55,28,0.35)'; g.lineWidth = 1;
+      for (var k = 0; k < 5; k++) {
+        var yy = i * rh + 4 + r() * (rh - 8);
+        g.beginPath(); g.moveTo(0, yy);
+        g.bezierCurveTo(w * 0.3, yy + 3, w * 0.6, yy - 3, w, yy + 1); g.stroke();
+      }
+      g.fillStyle = 'rgba(60,35,18,0.7)'; g.fillRect(r() * w, i * rh, 2.5, rh);
+    }
+  }
+  var woodTex = canvasTex(256, 256, function (g, w, h) { plankBG(g, w, h, '#9c6b41'); });
+  var shingleTex = canvasTex(256, 256, function (g, w, h) {
+    g.fillStyle = '#6e4438'; g.fillRect(0, 0, w, h);
+    var r = mulberry32(77), rows = 8, rh = h / rows, sw = 32;
+    for (var i = 0; i < rows; i++) {
+      var off = (i % 2) * sw / 2;
+      for (var x = -1; x < w / sw + 1; x++) {
+        var v = (r() - 0.5) * 26;
+        g.fillStyle = 'rgb(' + ((122 + v) | 0) + ',' + ((74 + v * 0.7) | 0) + ',' + ((60 + v * 0.6) | 0) + ')';
+        g.fillRect(x * sw + off + 1.5, i * rh, sw - 3, rh + 6);
+        g.strokeStyle = 'rgba(40,20,14,0.8)'; g.lineWidth = 2;
+        g.strokeRect(x * sw + off + 1.5, i * rh, sw - 3, rh + 6);
+      }
+    }
+  });
+  var stoneTex = canvasTex(128, 128, function (g, w, h) {
+    g.fillStyle = '#7d7d78'; g.fillRect(0, 0, w, h);
+    var r = mulberry32(123);
+    for (var i = 0; i < 26; i++) {
+      var v = (r() - 0.5) * 30;
+      g.fillStyle = 'rgb(' + ((130 + v) | 0) + ',' + ((128 + v) | 0) + ',' + ((120 + v) | 0) + ')';
+      var bw = 22 + r() * 26, bh = 16 + r() * 16;
+      g.beginPath();
+      if (g.roundRect) g.roundRect(r() * (w - bw), r() * (h - bh), bw, bh, 6);
+      else g.rect(r() * (w - bw), r() * (h - bh), bw, bh);
+      g.fill();
+      g.strokeStyle = 'rgba(50,48,44,0.7)'; g.lineWidth = 2; g.stroke();
+    }
+  });
+  var awningTex = canvasTex(128, 128, function (g, w, h) {
+    for (var i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#f5ead8' : '#c94f4f'; g.fillRect(i * w / 8, 0, w / 8, h); }
+    g.fillStyle = 'rgba(0,0,0,0.14)'; g.fillRect(0, h - 14, w, 14);
+  });
+  var rugTex = canvasTex(128, 128, function (g, w, h) {
+    g.fillStyle = '#a8433c'; g.fillRect(0, 0, w, h);
+    var cx = w / 2, cy = h / 2, rings = ['#e8d8b0', '#a8433c', '#d8a04a', '#7a2e2a'];
+    for (var i = 4; i >= 1; i--) {
+      g.fillStyle = rings[(4 - i) % rings.length];
+      g.beginPath(); g.arc(cx, cy, i * 15, 0, 7); g.fill();
+    }
+    g.fillStyle = '#e8d8b0';
+    for (var k = 0; k < 8; k++) {
+      var a = k / 8 * Math.PI * 2;
+      g.beginPath(); g.arc(cx + Math.cos(a) * 38, cy + Math.sin(a) * 38, 5, 0, 7); g.fill();
+    }
+  });
+  function boardSign(w, h, draw) {
+    return canvasTex(w, h, function (g) {
+      plankBG(g, w, h, '#7a5230');
+      g.fillStyle = 'rgba(40,22,10,0.35)'; g.fillRect(0, 0, w, 6); g.fillRect(0, h - 6, w, 6);
+      draw(g, w, h);
+    });
+  }
+  function signText(g, w, h, text, size, y) {
+    g.font = 'bold ' + size + 'px Georgia'; g.textAlign = 'center';
+    g.fillStyle = 'rgba(30,16,6,0.8)'; g.fillText(text, w / 2, (y || h / 2) + 3);
+    g.fillStyle = '#ffe9b8'; g.fillText(text, w / 2, (y || h / 2));
+  }
+  var bookSignTex = boardSign(256, 160, function (g, w, h) {
+    g.fillStyle = '#f5ead8';
+    g.beginPath(); g.moveTo(58, 42); g.lineTo(108, 32); g.lineTo(108, 78); g.lineTo(58, 88); g.closePath(); g.fill();
+    g.beginPath(); g.moveTo(198, 42); g.lineTo(148, 32); g.lineTo(148, 78); g.lineTo(198, 88); g.closePath(); g.fill();
+    g.strokeStyle = '#7a5230'; g.lineWidth = 3;
+    g.beginPath(); g.moveTo(128, 30); g.lineTo(128, 80); g.stroke();
+    signText(g, w, h, 'BOOKSHOP', 34, 132);
+  });
+  var shopSignTex = boardSign(256, 128, function (g, w, h) {
+    for (var i = 0; i < 8; i++) { g.fillStyle = i % 2 ? '#f5ead8' : '#c94f4f'; g.fillRect(i * w / 8, 0, 18, 18); }
+    signText(g, w, h, 'SHOP', 52, 92);
+  });
+  var marqueeTex = canvasTex(512, 128, function (g, w, h) {
+    g.fillStyle = '#5a1f1f'; g.fillRect(0, 0, w, h);
+    g.fillStyle = '#ffd9a0';
+    for (var x = 14; x < w; x += 28) { g.beginPath(); g.arc(x, 12, 6, 0, 7); g.fill(); g.beginPath(); g.arc(x, h - 12, 6, 0, 7); g.fill(); }
+    signText(g, w, h, '★ KANAVU THEATRE ★', 44, 82);
+  });
+  var heartTex = boardSign(128, 128, function (g, w, h) {
+    g.fillStyle = '#c94f4f';
+    g.beginPath(); g.moveTo(64, 96);
+    g.bezierCurveTo(20, 62, 34, 26, 64, 48);
+    g.bezierCurveTo(94, 26, 108, 62, 64, 96);
+    g.fill();
+  });
+  var homeTex = boardSign(256, 128, function (g, w, h) { signText(g, w, h, 'HOME ♥', 52, 84); });
+  var posterTex = canvasTex(256, 192, function (g, w, h) {
+    function poster(px, night, title) {
+      var grd = g.createLinearGradient(0, 0, 0, h);
+      if (night) { grd.addColorStop(0, '#1c2450'); grd.addColorStop(1, '#4a3a6b'); }
+      else { grd.addColorStop(0, '#ff9a5c'); grd.addColorStop(1, '#ffd166'); }
+      g.fillStyle = grd; g.fillRect(px, 0, 128, h);
+      g.fillStyle = night ? '#f5f0e6' : '#fff3da';
+      g.beginPath(); g.arc(px + 64, night ? 60 : 120, night ? 22 : 30, 0, 7); g.fill();
+      g.fillStyle = 'rgba(20,10,8,0.85)';
+      g.font = 'bold 26px Georgia'; g.textAlign = 'center';
+      g.fillText(title, px + 64, h - 26);
+      g.strokeStyle = '#3a2418'; g.lineWidth = 8; g.strokeRect(px + 4, 4, 120, h - 8);
+    }
+    poster(0, false, 'DREAMS'); poster(128, true, 'MEMORIES');
+  });
+  var photoTex = canvasTex(384, 128, function (g, w, h) {
+    var caps = ['you & me', 'us ♥', 'kanavu'];
+    for (var i = 0; i < 3; i++) {
+      var grd = g.createLinearGradient(0, 0, 0, h);
+      grd.addColorStop(0, ['#ff9a5c', '#8a5ab8', '#4a7ab8'][i]);
+      grd.addColorStop(1, ['#ffd166', '#ff8ab0', '#7ac8b8'][i]);
+      g.fillStyle = grd; g.fillRect(i * 128 + 8, 8, 112, 112);
+      g.fillStyle = '#c94f4f';
+      g.beginPath(); g.arc(i * 128 + 50, 58, 12, 0, 7); g.arc(i * 128 + 78, 58, 12, 0, 7); g.fill();
+      g.beginPath(); g.moveTo(i * 128 + 38, 62); g.lineTo(i * 128 + 90, 62); g.lineTo(i * 128 + 64, 92); g.closePath(); g.fill();
+      g.fillStyle = 'rgba(255,248,236,0.95)'; g.font = 'bold 17px Georgia'; g.textAlign = 'center';
+      g.fillText(caps[i], i * 128 + 64, 112);
+    }
+  });
+
+  /* ---- shared materials ---- */
+  var wallMat = new THREE.MeshStandardMaterial({ map: woodTex, roughness: 0.85 });
+  var trimMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 0.9 });
+  var roofMat = new THREE.MeshStandardMaterial({ map: shingleTex, roughness: 0.9 });
+  var stoneMat = new THREE.MeshStandardMaterial({ map: stoneTex, roughness: 1 });
+  var darkMat = new THREE.MeshStandardMaterial({ color: 0x241a10, roughness: 1 });
+  var paneMat = new THREE.MeshStandardMaterial({
+    color: 0x6a563e, emissive: 0xffb45e, emissiveIntensity: 0.25, roughness: 0.3, metalness: 0.1
+  });
+  var metalMat = new THREE.MeshStandardMaterial({ color: 0x9aa0a8, roughness: 0.35, metalness: 0.65 });
+  var fabricMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 1 });
+  var rugMat = new THREE.MeshStandardMaterial({ map: rugTex, roughness: 1 });
+  var shadeMat = new THREE.MeshStandardMaterial({
+    color: 0xffe2b0, emissive: 0xffb45e, emissiveIntensity: 0.7, roughness: 0.8, side: THREE.DoubleSide
+  });
+  var marqueeMat = new THREE.MeshStandardMaterial({
+    map: marqueeTex, emissive: 0xffffff, emissiveMap: marqueeTex, emissiveIntensity: 0.6, roughness: 0.7
+  });
+  var posterMat = new THREE.MeshStandardMaterial({
+    map: posterTex, emissive: 0xffffff, emissiveMap: posterTex, emissiveIntensity: 0.35, roughness: 0.8
+  });
+  var photoMat = new THREE.MeshStandardMaterial({ map: photoTex, roughness: 0.7 });
+  var leafMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 1 });
+  var flowerMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+  var bookMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.8 });
+  var jarMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.5 });
+  var awningMat = new THREE.MeshStandardMaterial({ map: awningTex, roughness: 0.85, side: THREE.DoubleSide });
+  var bookSignMat = new THREE.MeshStandardMaterial({ map: bookSignTex, roughness: 0.8 });
+  var shopSignMat = new THREE.MeshStandardMaterial({ map: shopSignTex, roughness: 0.8 });
+  var heartSignMat = new THREE.MeshStandardMaterial({ map: heartTex, roughness: 0.8 });
+  var homeSignMat = new THREE.MeshStandardMaterial({ map: homeTex, roughness: 0.8 });
+  var ceramicMat = new THREE.MeshStandardMaterial({ color: 0xf5f0e6, roughness: 0.5 });
+  var teaMat = new THREE.MeshStandardMaterial({ color: 0x8a4a1a, roughness: 0.3 });
+  var coneMat = new THREE.MeshBasicMaterial({
+    color: 0xfff2c0, transparent: true, opacity: 0.10,
+    blending: THREE.AdditiveBlending, depthWrite: false, side: THREE.DoubleSide, fog: false
+  });
+  windowMats.push(paneMat, shadeMat, marqueeMat, posterMat);
+
+  /* ---- shared unit geometries ---- */
+  var GEO = {
+    box: new THREE.BoxGeometry(1, 1, 1),
+    plane: new THREE.PlaneGeometry(1, 1),
+    cyl: new THREE.CylinderGeometry(0.5, 0.5, 1, 8),
+    sph: new THREE.SphereGeometry(0.5, 10, 8),
+    ico: new THREE.IcosahedronGeometry(0.5, 0),
+    circle: new THREE.CircleGeometry(0.5, 20)
+  };
+
+  /* ---- geometry merge helpers (keeps draw calls low) ---- */
+  var _e = new THREE.Euler(), _q = new THREE.Quaternion();
+  var _v = new THREE.Vector3(), _sv = new THREE.Vector3(), _m = new THREE.Matrix4();
+  function part(geo, px, py, pz, rx, ry, rz, sx, sy, sz, uvS) {
+    var g = geo.index ? geo.toNonIndexed() : geo.clone();
+    _e.set(rx || 0, ry || 0, rz || 0); _q.setFromEuler(_e);
+    _v.set(px, py, pz); _sv.set(sx || 1, sy || 1, sz || 1);
+    _m.compose(_v, _q, _sv);
+    g.applyMatrix4(_m);
+    if (uvS) {
+      var uv = g.attributes.uv, su = uvS[0], sv = uvS[1], ou = uvS[2] || 0, ov = uvS[3] || 0;
+      for (var i = 0; i < uv.count; i++) uv.setXY(i, uv.getX(i) * su + ou, uv.getY(i) * sv + ov);
+    }
+    return g;
+  }
+  function mergeGeos(list) {
+    var total = 0, i, hasColor = !!list[0].attributes.color;
+    for (i = 0; i < list.length; i++) total += list[i].attributes.position.count;
+    var pos = new Float32Array(total * 3), nor = new Float32Array(total * 3), uv = new Float32Array(total * 2);
+    var col = hasColor ? new Float32Array(total * 3) : null;
+    var o = 0;
+    for (i = 0; i < list.length; i++) {
+      var g = list[i];
+      pos.set(g.attributes.position.array, o * 3);
+      nor.set(g.attributes.normal.array, o * 3);
+      if (g.attributes.uv) uv.set(g.attributes.uv.array, o * 2);
+      if (col && g.attributes.color) col.set(g.attributes.color.array, o * 3);
+      o += g.attributes.position.count;
+    }
+    var out = new THREE.BufferGeometry();
+    out.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    out.setAttribute('normal', new THREE.BufferAttribute(nor, 3));
+    out.setAttribute('uv', new THREE.BufferAttribute(uv, 2));
+    if (col) out.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return out;
+  }
+
+  /* ---- global instancers (repeated parts, 1 draw call each) ---- */
+  function makeInstancer(geo, mat) {
+    var items = [];
+    return {
+      add: function (px, py, pz, rx, ry, rz, sx, sy, sz, color) {
+        items.push({ p: [px, py, pz], r: [rx || 0, ry || 0, rz || 0], s: [sx || 1, sy || 1, sz || 1], c: color });
+      },
+      build: function () {
+        var n = items.length;
+        var im = new THREE.InstancedMesh(geo, mat, Math.max(n, 1));
+        for (var i = 0; i < n; i++) {
+          var it = items[i];
+          _e.set(it.r[0], it.r[1], it.r[2]); _q.setFromEuler(_e);
+          _v.set(it.p[0], it.p[1], it.p[2]); _sv.set(it.s[0], it.s[1], it.s[2]);
+          _m.compose(_v, _q, _sv);
+          im.setMatrixAt(i, _m);
+          if (it.c !== undefined) im.setColorAt(i, dummyColor.setHex(it.c));
+        }
+        im.count = n;
+        im.instanceMatrix.needsUpdate = true;
+        if (im.instanceColor) im.instanceColor.needsUpdate = true;
+        im.castShadow = true; im.receiveShadow = true;
+        im.frustumCulled = false; // spans the whole world; tiny anyway
+        scene.add(im);
+        return im;
+      }
+    };
+  }
+  var winFrameI = makeInstancer(GEO.box, trimMat);
+  var winPaneI = makeInstancer(GEO.plane, paneMat);
+  var postI = makeInstancer(GEO.cyl, trimMat);
+  var crateI = makeInstancer(GEO.box, wallMat);
+  var handleI = makeInstancer(GEO.sph, metalMat);
+  var planterI = makeInstancer(GEO.box, trimMat);
+  var flowerI = makeInstancer(GEO.ico, flowerMat);
+  var leafI = makeInstancer(GEO.ico, leafMat);
+  var bookI = makeInstancer(GEO.box, bookMat);
+  var jarI = makeInstancer(GEO.cyl, jarMat);
+
+  /* ---- chimney smoke + kettle steam: one shader-driven Points cloud ---- */
+  var smokeTex = createGlowTexture('rgba(215,210,205,0.9)', 'rgba(215,210,205,0)');
+  var SMK_N = 160;
+  var smkPos = new Float32Array(SMK_N * 3), smkSize = new Float32Array(SMK_N), smkAlpha = new Float32Array(SMK_N);
+  var smkParts = [];
+  for (var si = 0; si < SMK_N; si++) smkParts.push({ life: 1e9, max: 1, x: 0, y: -999, z: 0, vx: 0, vy: 0, vz: 0, s0: 1, grow: 1, alpha: 0.4 });
+  var smkGeo = new THREE.BufferGeometry();
+  smkGeo.setAttribute('position', new THREE.BufferAttribute(smkPos, 3));
+  smkGeo.setAttribute('aSize', new THREE.BufferAttribute(smkSize, 1));
+  smkGeo.setAttribute('aAlpha', new THREE.BufferAttribute(smkAlpha, 1));
+  var smkMat = new THREE.ShaderMaterial({
+    uniforms: { uMap: { value: smokeTex } },
+    transparent: true, depthWrite: false,
+    vertexShader: [
+      'attribute float aSize;', 'attribute float aAlpha;', 'varying float vA;',
+      'void main(){ vA = aAlpha;',
+      ' vec4 mv = modelViewMatrix * vec4(position, 1.0);',
+      ' gl_PointSize = aSize * 240.0 / max(-mv.z, 1.0);',
+      ' gl_Position = projectionMatrix * mv; }'
+    ].join('\n'),
+    fragmentShader: [
+      'uniform sampler2D uMap;', 'varying float vA;',
+      'void main(){ vec4 t = texture2D(uMap, gl_PointCoord);',
+      ' gl_FragColor = vec4(vec3(0.84, 0.82, 0.80), t.a * vA); }'
+    ].join('\n')
+  });
+  var smokePts = new THREE.Points(smkGeo, smkMat);
+  smokePts.frustumCulled = false;
+  scene.add(smokePts);
+  var smkEmitters = [];
+  function addSmokeEmitter(x, y, z, opts) {
+    var e = {
+      x: x, y: y, z: z, rate: opts.rate, acc: Math.random(),
+      life: opts.life, vy: opts.vy, vx: opts.vx || 0, vz: opts.vz || 0,
+      size: opts.size, grow: opts.grow, alpha: opts.alpha, active: opts.active || null
+    };
+    smkEmitters.push(e);
+    return e;
+  }
+  function updateSmoke(dt) {
+    for (var i = 0; i < smkEmitters.length; i++) {
+      var e = smkEmitters[i];
+      if (e.active && !e.active()) continue;
+      e.acc += e.rate * dt;
+      while (e.acc >= 1) {
+        e.acc -= 1;
+        for (var j = 0; j < SMK_N; j++) {
+          var p = smkParts[j];
+          if (p.life >= p.max) {
+            p.life = 0; p.max = e.life * (0.8 + Math.random() * 0.4);
+            p.x = e.x; p.y = e.y; p.z = e.z;
+            p.vx = e.vx + (Math.random() - 0.5) * 0.3;
+            p.vy = e.vy * (0.9 + Math.random() * 0.2);
+            p.vz = e.vz + (Math.random() - 0.5) * 0.3;
+            p.s0 = e.size * (0.8 + Math.random() * 0.4);
+            p.grow = e.grow; p.alpha = e.alpha;
+            break;
+          }
+        }
+      }
+    }
+    for (var k = 0; k < SMK_N; k++) {
+      var q = smkParts[k];
+      if (q.life < q.max) {
+        q.life += dt;
+        q.x += q.vx * dt; q.y += q.vy * dt; q.z += q.vz * dt;
+        var lt = Math.min(q.life / q.max, 1);
+        smkPos[k * 3] = q.x; smkPos[k * 3 + 1] = q.y; smkPos[k * 3 + 2] = q.z;
+        smkSize[k] = q.s0 * (1 + q.grow * lt);
+        smkAlpha[k] = Math.sin(lt * Math.PI) * q.alpha;
+      } else smkAlpha[k] = 0;
+    }
+    smkGeo.attributes.position.needsUpdate = true;
+    smkGeo.attributes.aSize.needsUpdate = true;
+    smkGeo.attributes.aAlpha.needsUpdate = true;
+  }
+  /* ---- building type specs ---- */
+  var BTYPES = {
+    bookshop: { w: 10, d: 8, wallH: 6.6, roofH: 3.1, name: 'Bookshop', icon: '📖', porch: true, sign: 'book' },
+    shop:     { w: 9,  d: 7, wallH: 5.0, roofH: 2.6, name: 'Shop', icon: '🛍️', awning: true, sign: 'shop' },
+    theatre:  { w: 11, d: 9, wallH: 6.0, roofH: 3.0, name: 'Theatre', icon: '🎭', marquee: true },
+    cottage:  { w: 7,  d: 6, wallH: 4.2, roofH: 2.4, name: 'Memory Cottage', icon: '💭', flowers: true, sign: 'heart' },
+    house:    { w: 12, d: 9, wallH: 5.5, roofH: 3.0, name: "Couple's House", icon: '🏠', porch: true, bench: true, sign: 'home' }
+  };
+  var FLOWER_COLS = [0xff8ab0, 0xffd166, 0xff6b6b, 0xc39bff, 0xffffff, 0xff9a5c];
+
+  /* ---- building runtime data (10 = 5 types x mirrored islands) ---- */
+  var INTERIOR_XS = [-48, -24, 0, 24, 48];
+  var BUILDINGS = [];
+  ['A', 'B'].forEach(function (side) {
+    BUILD_PLOTS_A.forEach(function (p, pi) {
+      var s = side === 'A' ? 1 : -1;
+      var bx = p.x * s, bz = p.z;
+      var ccx = side === 'A' ? ISL_A.cx : ISL_B.cx;
+      var yaw = Math.atan2(ccx - bx, 0 - bz); // door faces island center
+      var fx = Math.sin(yaw), fz = Math.cos(yaw);
+      var spec = BTYPES[p.type];
+      var doorG = groundHeight(bx + fx * (spec.d / 2 + 1), bz + fz * (spec.d / 2 + 1));
+      BUILDINGS.push({
+        side: side, type: p.type, x: bx, z: bz, yaw: yaw, fx: fx, fz: fz,
+        gy: doorG - 0.4, // group base: door sits just above the door-side ground
+        ix: INTERIOR_XS[pi], iz: side === 'A' ? -400 : -418
+      });
+    });
+  });
+
+  function meshFromParts(parts, mat) {
+    if (!parts.length) return null;
+    var m = new THREE.Mesh(mergeGeos(parts), mat);
+    m.castShadow = true; m.receiveShadow = true;
+    return m;
+  }
+
+  /* ---- exterior builder (local space: front/door faces +z) ---- */
+  function buildExterior(b) {
+    var spec = BTYPES[b.type];
+    var w = spec.w, d = spec.d, wallH = spec.wallH, roofH = spec.roofH;
+    var wallTop = 0.55 + wallH;
+    var g = new THREE.Group();
+    var cy = Math.cos(b.yaw), sy = Math.sin(b.yaw);
+    function wpos(lx, ly, lz) {
+      return { x: b.x + lx * cy + lz * sy, y: b.gy + ly, z: b.z - lx * sy + lz * cy };
+    }
+    function winst(im, lx, ly, lz, rx, ry, rz, sx, syy, sz, color) {
+      var p = wpos(lx, ly, lz);
+      im.add(p.x, p.y, p.z, rx || 0, (ry || 0) + b.yaw, rz || 0, sx || 1, syy || 1, sz || 1, color);
+    }
+    var woodParts = [], trimParts = [], roofParts = [], stoneParts = [], darkParts = [];
+    var signParts = [], marqParts = [], posterParts = [], awnParts = [];
+
+    /* stone pad (levels the slope) + foundation */
+    stoneParts.push(part(GEO.box, 0, -1.45, 0.3, 0, 0, 0, w + 5, 3.6, d + 7, [4, 2]));
+    stoneParts.push(part(GEO.box, 0, -0.1, 0, 0, 0, 0, w + 0.7, 1.3, d + 0.7, [w / 3, 1]));
+    /* plank walls + corner boards + baseboard */
+    woodParts.push(part(GEO.box, 0, 0.55 + wallH / 2, 0, 0, 0, 0, w, wallH, d, [w / 3, wallH / 3]));
+    [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (s) {
+      trimParts.push(part(GEO.box, s[0] * (w / 2 - 0.12), 0.55 + wallH / 2, s[1] * (d / 2 - 0.12),
+        0, 0, 0, 0.5, wallH, 0.5, [1, 2]));
+    });
+    trimParts.push(part(GEO.box, 0, 0.72, 0, 0, 0, 0, w + 0.18, 0.35, d + 0.18, [w / 3, 1]));
+    if (b.type === 'bookshop') // two-story band
+      trimParts.push(part(GEO.box, 0, 0.55 + wallH / 2, 0, 0, 0, 0, w + 0.14, 0.32, d + 0.14, [w / 3, 1]));
+
+    /* pitched shingle roof: two slabs + ridge beam + wood gables + frieze */
+    var ov = 0.9, run = d / 2 + ov;
+    var slopeLen = Math.sqrt(run * run + roofH * roofH) + 0.5;
+    var ang = Math.atan2(roofH, run);
+    roofParts.push(part(GEO.box, 0, wallTop + roofH / 2 + 0.12, run / 2, ang, 0, 0,
+      w + 2 * ov, 0.35, slopeLen, [(w + 2 * ov) / 3, slopeLen / 3]));
+    roofParts.push(part(GEO.box, 0, wallTop + roofH / 2 + 0.12, -run / 2, -ang, 0, 0,
+      w + 2 * ov, 0.35, slopeLen, [(w + 2 * ov) / 3, slopeLen / 3]));
+    roofParts.push(part(GEO.box, 0, wallTop + roofH + 0.18, 0, 0, 0, 0,
+      w + 2 * ov + 0.3, 0.34, 0.75, [w / 3, 1]));
+    var tri = new THREE.Shape();
+    tri.moveTo(-d / 2, 0); tri.lineTo(d / 2, 0); tri.lineTo(0, roofH); tri.closePath();
+    var triGeo = new THREE.ShapeGeometry(tri);
+    woodParts.push(part(triGeo, w / 2 - 0.06, wallTop, 0, 0, Math.PI / 2, 0, 1, 1, 1, [d / 3, roofH / 3]));
+    woodParts.push(part(triGeo, -w / 2 + 0.06, wallTop, 0, 0, -Math.PI / 2, 0, 1, 1, 1, [d / 3, roofH / 3]));
+    trimParts.push(part(GEO.box, 0, wallTop + 0.32, d / 2 + 0.06, 0, 0, 0, w + 2 * ov - 0.2, 0.72, 0.16, [w / 3, 1]));
+    trimParts.push(part(GEO.box, 0, wallTop + 0.32, -d / 2 - 0.06, 0, 0, 0, w + 2 * ov - 0.2, 0.72, 0.16, [w / 3, 1]));
+
+    /* windows: instanced frame + glowing pane + sill */
+    function window_(lx, ly, lz, lry, ww, wh) {
+      winst(winFrameI, lx, ly, lz, 0, lry, 0, ww + 0.55, wh + 0.55, 0.3);
+      var nx = Math.sin(lry), nz = Math.cos(lry);
+      winst(winPaneI, lx + nx * 0.2, ly, lz + nz * 0.2, 0, lry, 0, ww, wh, 1);
+      trimParts.push(part(GEO.box, lx, ly - wh / 2 - 0.16, lz, 0, lry, 0, ww + 0.8, 0.2, 0.5, [1, 1]));
+    }
+    /* door: dark recess + frame + panel(s) + step + handle */
+    function door_(dx, dbl) {
+      var dw = dbl ? 2.6 : 1.7, dh = 3.0, by = 0.55;
+      darkParts.push(part(GEO.box, dx, by + dh / 2, d / 2 + 0.02, 0, 0, 0, dw + 0.5, dh + 0.35, 0.12, [1, 1]));
+      trimParts.push(part(GEO.box, dx, by + dh / 2 + 0.05, d / 2 + 0.1, 0, 0, 0, dw + 0.3, dh + 0.3, 0.18, [1, 1]));
+      if (dbl) {
+        trimParts.push(part(GEO.box, dx - dw / 4, by + dh / 2, d / 2 + 0.2, 0, 0, 0, dw / 2 - 0.08, dh - 0.1, 0.1, [1, 1]));
+        trimParts.push(part(GEO.box, dx + dw / 4, by + dh / 2, d / 2 + 0.2, 0, 0, 0, dw / 2 - 0.08, dh - 0.1, 0.1, [1, 1]));
+      } else {
+        trimParts.push(part(GEO.box, dx, by + dh / 2, d / 2 + 0.2, 0, 0, 0, dw - 0.12, dh - 0.1, 0.1, [1, 1]));
+      }
+      stoneParts.push(part(GEO.box, dx, 0.46, d / 2 + 0.75, 0, 0, 0, dw + 1.3, 0.22, 1.7, [1, 1]));
+      var hx = dx + (dbl ? dw / 4 - 0.4 : dw / 2 - 0.4);
+      var hp = wpos(hx, by + 1.55, d / 2 + 0.3);
+      handleI.add(hp.x, hp.y, hp.z, 0, 0, 0, 0.18, 0.18, 0.18);
+    }
+    /* porch with posts + slanted roof (+ bench for the couple's house) */
+    function porch_(withBench) {
+      var pw = Math.min(w * 0.72, 7);
+      woodParts.push(part(GEO.box, 0, 0.5, d / 2 + 1.5, 0, 0, 0, pw, 0.3, 3.0, [pw / 3, 1]));
+      [[-1, -1], [1, -1], [-1, 1], [1, 1]].forEach(function (s) {
+        winst(postI, s[0] * (pw / 2 - 0.35), 2.35, d / 2 + 1.5 + s[1] * 1.15, 0, 0, 0, 0.3, 3.4, 0.3);
+      });
+      roofParts.push(part(GEO.box, 0, 4.0, d / 2 + 1.5, -0.09, 0, 0, pw + 0.9, 0.22, 3.9, [pw / 3, 1]));
+      if (withBench) {
+        var bz = d / 2 + 1.75, bx = -pw / 4;
+        trimParts.push(part(GEO.box, bx, 1.2, bz, 0, 0, 0, 2.6, 0.22, 0.95, [1, 1]));
+        trimParts.push(part(GEO.box, bx, 1.85, bz - 0.42, 0, 0, 0, 2.6, 1.05, 0.18, [1, 1]));
+        trimParts.push(part(GEO.box, bx - 1.15, 0.85, bz, 0, 0, 0, 0.18, 0.75, 0.85, [1, 1]));
+        trimParts.push(part(GEO.box, bx + 1.15, 0.85, bz, 0, 0, 0, 0.18, 0.75, 0.85, [1, 1]));
+      }
+    }
+
+    /* per-type layout */
+    var doorDx = 0;
+    if (b.type === 'bookshop') {
+      doorDx = -2.6;
+      window_(1.4, 2.75, d / 2, 0, 3.4, 2.3);   // big display window
+      window_(-2.6, 5.35, d / 2, 0, 1.5, 1.6);
+      window_(0.6, 5.35, d / 2, 0, 1.5, 1.6);
+      window_(3.2, 5.35, d / 2, 0, 1.5, 1.6);
+      window_(w / 2, 2.75, 1.5, Math.PI / 2, 1.5, 1.8);
+      window_(-w / 2, 2.75, 1.5, -Math.PI / 2, 1.5, 1.8);
+      door_(doorDx, false);
+      porch_(false);
+      /* hanging book sign on a post */
+      winst(postI, w / 2 + 1.6, 2.25, d / 2 + 0.6, 0, 0, 0, 0.3, 3.8, 0.3);
+      trimParts.push(part(GEO.box, w / 2 + 0.85, 3.85, d / 2 + 0.6, 0, 0, 0, 1.7, 0.18, 0.18, [1, 1]));
+      signParts.push(part(GEO.box, w / 2 + 0.85, 2.95, d / 2 + 0.6, 0, 0, 0, 1.9, 1.35, 0.12, [1, 1]));
+    } else if (b.type === 'shop') {
+      window_(-2.3, 2.95, d / 2, 0, 2.0, 1.8);
+      window_(2.3, 2.95, d / 2, 0, 2.0, 1.8);
+      window_(w / 2, 2.95, 0.5, Math.PI / 2, 1.6, 1.6);
+      window_(-w / 2, 2.95, 0.5, -Math.PI / 2, 1.6, 1.6);
+      door_(0, false);
+      /* striped awning + crates + hanging sign between the posts */
+      awnParts.push(part(GEO.box, 0, 4.35, d / 2 + 1.35, -0.33, 0, 0, 7.6, 0.16, 2.9, [3, 1]));
+      winst(postI, -3.4, 2.25, d / 2 + 2.55, 0, 0, 0, 0.24, 3.9, 0.24);
+      winst(postI, 3.4, 2.25, d / 2 + 2.55, 0, 0, 0, 0.24, 3.9, 0.24);
+      winst(crateI, -w / 2 - 0.4, 0.9, d / 2 - 0.5, 0, 0.3, 0, 1.15, 1.1, 1.15);
+      winst(crateI, -w / 2 - 0.3, 1.8, d / 2 - 0.6, 0, 0.9, 0, 0.9, 0.9, 0.9);
+      winst(crateI, w / 2 + 0.5, 0.8, d / 2 - 0.4, 0, -0.2, 0, 0.95, 0.9, 0.95);
+      signParts.push(part(GEO.box, 0, 3.2, d / 2 + 2.55, 0, 0, 0, 3.6, 1.1, 0.14, [1, 1]));
+    } else if (b.type === 'theatre') {
+      window_(-4.5, 2.9, d / 2, 0, 1.7, 2.0);
+      window_(4.5, 2.9, d / 2, 0, 1.7, 2.0);
+      window_(w / 2, 3.0, -1, Math.PI / 2, 1.6, 1.8);
+      window_(-w / 2, 3.0, -1, -Math.PI / 2, 1.6, 1.8);
+      door_(0, true);
+      /* glowing marquee + poster frames */
+      trimParts.push(part(GEO.box, 0, 4.9, d / 2 + 0.75, 0, 0, 0, 6.6, 1.6, 1.0, [2, 1]));
+      marqParts.push(part(GEO.plane, 0, 4.9, d / 2 + 1.32, 0, 0, 0, 6.2, 1.25, 1, [1, 1]));
+      posterParts.push(part(GEO.plane, -2.75, 2.7, d / 2 + 0.09, 0, 0, 0, 1.7, 2.3, 1, [0.5, 1, 0, 0]));
+      posterParts.push(part(GEO.plane, 2.75, 2.7, d / 2 + 0.09, 0, 0, 0, 1.7, 2.3, 1, [0.5, 1, 0.5, 0]));
+    } else if (b.type === 'cottage') {
+      window_(-1.8, 2.45, d / 2, 0, 1.7, 1.5);
+      window_(1.8, 2.45, d / 2, 0, 1.7, 1.5);
+      window_(0, 2.45, -d / 2, Math.PI, 1.7, 1.5);
+      door_(0, false);
+      /* flower boxes + ivy + heart plaque */
+      [-1.8, 1.8].forEach(function (fx, fi) {
+        winst(planterI, fx, 1.32, d / 2 + 0.35, 0, 0, 0, 2.4, 0.55, 0.7);
+        for (var f2 = 0; f2 < 5; f2++) {
+          var pp = wpos(fx - 0.9 + f2 * 0.45, 1.82, d / 2 + 0.35);
+          flowerI.add(pp.x, pp.y, pp.z, 0, 0, 0, 0.5, 0.5, 0.5,
+            FLOWER_COLS[(f2 + fi * 2) % FLOWER_COLS.length]);
+        }
+      });
+      var ir = mulberry32(7);
+      for (var iv = 0; iv < 7; iv++) {
+        var ipp = wpos(-w / 2 + 0.4 + ir() * 0.8, 1.2 + iv * 0.72 + ir() * 0.3, d / 2 + 0.28);
+        leafI.add(ipp.x, ipp.y, ipp.z, 0, ir() * 3, 0, 1.1 + ir() * 0.7, 0.9 + ir() * 0.5, 0.8, 0x4a7a3e);
+      }
+      signParts.push(part(GEO.plane, 0, 4.05, d / 2 + 0.09, 0, 0, 0, 1.3, 1.3, 1, [1, 1]));
+    } else if (b.type === 'house') {
+      window_(-3.3, 2.85, d / 2, 0, 2.2, 1.9);
+      window_(3.3, 2.85, d / 2, 0, 2.2, 1.9);
+      window_(w / 2, 2.85, 1.8, Math.PI / 2, 1.8, 1.8);
+      window_(w / 2, 2.85, -1.8, Math.PI / 2, 1.8, 1.8);
+      window_(-w / 2, 2.85, 1.8, -Math.PI / 2, 1.8, 1.8);
+      window_(-w / 2, 2.85, -1.8, -Math.PI / 2, 1.8, 1.8);
+      door_(0, false);
+      porch_(true);
+      /* planters flanking the door + home plaque */
+      [-2.6, 2.6].forEach(function (fx, fi) {
+        winst(planterI, fx, 0.62, d / 2 + 0.9, 0, 0, 0, 1.1, 0.55, 1.1);
+        for (var f3 = 0; f3 < 3; f3++) {
+          var pp2 = wpos(fx - 0.3 + f3 * 0.3, 1.12, d / 2 + 0.9);
+          flowerI.add(pp2.x, pp2.y, pp2.z, 0, 0, 0, 0.55, 0.55, 0.55,
+            FLOWER_COLS[(f3 + fi * 3) % FLOWER_COLS.length]);
+        }
+      });
+      signParts.push(part(GEO.plane, 0, 4.5, d / 2 + 0.09, 0, 0, 0, 2.6, 1.1, 1, [1, 1]));
+    }
+
+    /* chimney with animated smoke */
+    var chx = w * 0.28, chimH = roofH + 2.4, chimTop = wallTop - 1.0 + chimH;
+    stoneParts.push(part(GEO.box, chx, wallTop - 1.0 + chimH / 2, 0, 0, 0, 0, 1.2, chimH, 1.2, [1, 1]));
+    stoneParts.push(part(GEO.box, chx, chimTop + 0.15, 0, 0, 0, 0, 1.7, 0.3, 1.7, [1, 1]));
+    var sp = wpos(chx, chimTop + 0.5, 0);
+    addSmokeEmitter(sp.x, sp.y, sp.z, { rate: 2.2, life: 3.2, vy: 1.7, vx: 0.35, size: 1.1, grow: 1.7, alpha: 0.4 });
+
+    /* assemble merged meshes */
+    var signMatFor = { book: bookSignMat, shop: shopSignMat, heart: heartSignMat, home: homeSignMat }[spec.sign];
+    [meshFromParts(woodParts, wallMat), meshFromParts(trimParts, trimMat),
+     meshFromParts(roofParts, roofMat), meshFromParts(stoneParts, stoneMat),
+     meshFromParts(darkParts, darkMat),
+     signMatFor ? meshFromParts(signParts, signMatFor) : null,
+     meshFromParts(marqParts, marqueeMat), meshFromParts(posterParts, posterMat),
+     meshFromParts(awnParts, awningMat)
+    ].forEach(function (m) { if (m) g.add(m); });
+
+    g.position.set(b.x, b.gy, b.z);
+    g.rotation.y = b.yaw;
+    registerChunk(g, b.x, b.z);
+
+    /* collider, door prompt (just outside the pad's front edge, reachable past the collider) */
+    var colR = Math.hypot(w + 5, d + 7) / 2 + 1;
+    colliders.push({ x: b.x, z: b.z, r: colR });
+    var dw = wpos(doorDx, 0, d / 2 + 0.1);
+    b.door = { x: dw.x, z: dw.z, dx: doorDx };
+    var promptD = (d + 7) / 2 + 1.0; // pad front edge + margin; always within 5 of the collider edge
+    interactables.push({
+      x: b.x + b.fx * promptD, z: b.z + b.fz * promptD, r: 5,
+      label: spec.icon + ' Enter ' + spec.name,
+      action: function () { enterInterior(b); }
+    });
+  }
+
+  BUILDINGS.forEach(function (b) { buildExterior(b); });
+  /* ---- interiors: cozy teleport rooms far south over water ---- */
+  var RW = 13, RD = 11, WH = 4.2;
+  var BOOK_COLS = [0xc94f4f, 0x4a7ab8, 0x4aa86b, 0xd8a04a, 0x8a5ab8, 0xe8e0d0, 0x3a8a8a];
+  var JAR_COLS = [0xd8a04a, 0x8ab86a, 0xc96a8a, 0x7ab8c9, 0xe8e0d0];
+  function addBookRow(wx, wy, wz, n, seed) {
+    var r = mulberry32(1000 + seed);
+    for (var i = 0; i < n; i++) {
+      var bw = 0.26 + r() * 0.12, bh = 0.55 + r() * 0.2;
+      bookI.add(wx - n * 0.17 + i * 0.34 + bw / 2, wy + bh / 2, wz,
+        0, (r() - 0.5) * 0.12, (r() - 0.5) * 0.06,
+        bw, bh, 0.62, BOOK_COLS[Math.floor(r() * BOOK_COLS.length)]);
+    }
+  }
+  var _fc = new THREE.Color();
+  function softPart(geo, px, py, pz, rx, ry, rz, sx, sy, sz, hex) {
+    var g2 = part(geo, px, py, pz, rx, ry, rz, sx, sy, sz);
+    var n = g2.attributes.position.count, col = new Float32Array(n * 3);
+    _fc.setHex(hex);
+    for (var i = 0; i < n; i++) { col[i * 3] = _fc.r; col[i * 3 + 1] = _fc.g; col[i * 3 + 2] = _fc.b; }
+    g2.setAttribute('color', new THREE.BufferAttribute(col, 3));
+    return g2;
+  }
+
+  function buildInterior(b, idx) {
+    var g = new THREE.Group();
+    var cx = b.ix, cz = b.iz;
+    g.position.set(cx, 0, cz);
+    /* dollhouse shell: inward-facing planes (single-sided) merged into one mesh.
+       From outside the room the near wall/ceiling cull away so the camera
+       always sees in; from inside everything renders. No per-frame hiding. */
+    var segW = (RW - 2.0) / 2;
+    var shellMesh = new THREE.Mesh(mergeGeos([
+      part(GEO.plane, 0, WH / 2, -RD / 2, 0, 0, 0, RW, WH, 1, [RW / 3, WH / 3]),
+      part(GEO.plane, -(1.0 + segW / 2), WH / 2, RD / 2, 0, Math.PI, 0, segW, WH, 1, [segW / 3, WH / 3]),
+      part(GEO.plane, (1.0 + segW / 2), WH / 2, RD / 2, 0, Math.PI, 0, segW, WH, 1, [segW / 3, WH / 3]),
+      part(GEO.plane, 0, 3.1 + (WH - 3.1) / 2, RD / 2, 0, Math.PI, 0, 2.0, WH - 3.1, 1, [1, 1]),
+      part(GEO.plane, -RW / 2, WH / 2, 0, 0, Math.PI / 2, 0, RD, WH, 1, [RD / 3, WH / 3]),
+      part(GEO.plane, RW / 2, WH / 2, 0, 0, -Math.PI / 2, 0, RD, WH, 1, [RD / 3, WH / 3]),
+      part(GEO.plane, 0, WH, 0, Math.PI / 2, 0, 0, RW, RD, 1, [RW / 3, RD / 3])
+    ]), wallMat);
+    shellMesh.receiveShadow = true;
+    g.add(shellMesh);
+    /* open door panel swung inward (marks the entrance) */
+    var doorMesh = new THREE.Mesh(mergeGeos([
+      part(GEO.box, -1.7, 1.5, -0.7, 0, 1.05, 0, 1.9, 3.0, 0.12, [1, 1])
+    ]), trimMat);
+    doorMesh.position.set(0, 0, RD / 2);
+    g.add(doorMesh);
+    /* platform + plank floor (top at y=0) + baseboards */
+    var floorMesh = new THREE.Mesh(mergeGeos([
+      part(GEO.box, 0, -0.81, 0, 0, 0, 0, RW + 2.5, 1.3, RD + 2.5, [5, 1]),
+      part(GEO.box, 0, -0.08, 0, 0, 0, 0, RW, 0.16, RD, [RW / 3, RD / 3]),
+      part(GEO.box, 0, 0.14, -RD / 2 + 0.2, 0, 0, 0, RW - 0.4, 0.28, 0.12, [3, 1]),
+      part(GEO.box, 0, 0.14, RD / 2 - 0.2, 0, 0, 0, RW - 0.4, 0.28, 0.12, [3, 1]),
+      part(GEO.box, -RW / 2 + 0.2, 0.14, 0, 0, 0, 0, 0.12, 0.28, RD - 0.4, [1, 1]),
+      part(GEO.box, RW / 2 - 0.2, 0.14, 0, 0, 0, 0, 0.12, 0.28, RD - 0.4, [1, 1])
+    ]), wallMat);
+    floorMesh.castShadow = true; floorMesh.receiveShadow = true;
+    g.add(floorMesh);
+    /* hanging lamp + warm point light */
+    var lampMesh = new THREE.Mesh(mergeGeos([
+      part(GEO.cyl, 0, WH - 0.5, 0, 0, 0, 0, 0.12, 1.0, 0.12, [1, 1]),
+      part(GEO.cyl, 0, WH - 1.35, 0, 0, 0, 0, 1.5, 0.85, 1.5, [1, 1])
+    ]), shadeMat);
+    g.add(lampMesh);
+    var lampLight = new THREE.PointLight(0xffc98a, 5, 20, 1.8);
+    lampLight.position.set(0, WH - 1.9, 0);
+    g.add(lampLight);
+
+    var woodP = [], softP = [], trimP = [], photoP = [];
+    var extras = []; // {parts, mat, noShadow}
+    var rugX = 0, rugZ = 0;
+
+    if (b.type === 'bookshop') {
+      rugX = -3; rugZ = 2.2;
+      [-4, 0, 4].forEach(function (sx, si) {
+        woodP.push(part(GEO.box, sx - 1.6, 1.82, -RD / 2 + 0.45, 0, 0, 0, 0.18, 3.6, 0.9, [1, 1]));
+        woodP.push(part(GEO.box, sx + 1.6, 1.82, -RD / 2 + 0.45, 0, 0, 0, 0.18, 3.6, 0.9, [1, 1]));
+        for (var s2 = 0; s2 < 4; s2++)
+          woodP.push(part(GEO.box, sx, 0.62 + s2 * 0.95, -RD / 2 + 0.45, 0, 0, 0, 3.4, 0.14, 0.9, [1, 1]));
+        for (var s3 = 0; s3 < 3; s3++)
+          addBookRow(cx + sx - 1.35, 0.69 + s3 * 0.95, cz - RD / 2 + 0.45, 8, si * 10 + s3);
+      });
+      woodP.push(part(GEO.box, 3.6, 0.65, 3.2, 0, 0, 0, 2.6, 1.3, 1.1, [1, 1]));
+      woodP.push(part(GEO.box, 3.6, 1.36, 3.2, 0, 0, 0, 2.8, 0.12, 1.3, [1, 1]));
+      softP.push(softPart(GEO.box, -3.6, 0.42, 2.4, 0, 0.5, 0, 1.5, 0.7, 1.4, 0xb85c38));
+      softP.push(softPart(GEO.box, -3.6, 1.02, 2.95, 0, 0.5, 0, 1.5, 1.1, 0.35, 0xb85c38));
+      softP.push(softPart(GEO.box, -4.3, 0.82, 2.4, 0, 0.5, 0, 0.3, 0.9, 1.3, 0xa04e30));
+      softP.push(softPart(GEO.box, -2.9, 0.82, 2.4, 0, 0.5, 0, 0.3, 0.9, 1.3, 0xa04e30));
+      woodP.push(part(GEO.cyl, -1.8, 0.45, 3.4, 0, 0, 0, 1.0, 0.9, 1.0, [1, 1]));
+    } else if (b.type === 'shop') {
+      rugX = 0.5; rugZ = 1.5;
+      [-1, 1].forEach(function (s) {
+        var wx = s * (RW / 2 - 0.75);
+        [-2.2, 1.4].forEach(function (wz, zi) {
+          woodP.push(part(GEO.box, wx - s * 0.55, 1.75, wz - 1.05, 0, 0, 0, 0.16, 3.5, 0.8, [1, 1]));
+          woodP.push(part(GEO.box, wx - s * 0.55, 1.75, wz + 1.05, 0, 0, 0, 0.16, 3.5, 0.8, [1, 1]));
+          for (var sh = 0; sh < 3; sh++) {
+            var byy = 0.75 + sh * 0.95;
+            woodP.push(part(GEO.box, wx - s * 0.55, byy, wz, 0, 0, 0, 0.9, 0.14, 2.3, [1, 1]));
+            for (var ji = 0; ji < 4; ji++)
+              jarI.add(cx + wx - s * 0.55, byy + 0.38, cz + wz - 0.75 + ji * 0.5, 0, 0, 0,
+                0.5, 0.62, 0.5, JAR_COLS[(ji + sh * 2 + zi * 3 + (s > 0 ? 5 : 0)) % JAR_COLS.length]);
+          }
+        });
+      });
+      woodP.push(part(GEO.box, 2.8, 0.6, 3.4, 0, 0, 0, 3.0, 1.2, 1.2, [1, 1]));
+      woodP.push(part(GEO.box, 2.8, 1.25, 3.4, 0, 0, 0, 3.1, 0.1, 1.3, [1, 1]));
+      trimP.push(part(GEO.box, -1.2, WH - 0.6, 1.5, 0, 0, 0, 0.08, 1.2, 0.08, [1, 1]));
+      trimP.push(part(GEO.box, 1.2, WH - 0.6, 1.5, 0, 0, 0, 0.08, 1.2, 0.08, [1, 1]));
+      extras.push({ parts: [part(GEO.box, 0, WH - 1.7, 1.5, 0, 0, 0, 3.0, 1.1, 0.14, [1, 1])], mat: shopSignMat });
+    } else if (b.type === 'theatre') {
+      rugX = 0; rugZ = 2.6;
+      woodP.push(part(GEO.box, 0, 0.4, -3.6, 0, 0, 0, 6.4, 0.8, 3.0, [2, 1]));
+      softP.push(softPart(GEO.box, 0, 2.0, -5.05, 0, 0, 0, 6.4, 3.8, 0.25, 0x6e1f1f));
+      softP.push(softPart(GEO.box, -3.0, 2.1, -4.55, 0, 0.28, 0, 1.15, 4.0, 0.7, 0xa32e2e));
+      softP.push(softPart(GEO.box, 3.0, 2.1, -4.55, 0, -0.28, 0, 1.15, 4.0, 0.7, 0xa32e2e));
+      softP.push(softPart(GEO.box, 0, 3.7, -4.65, 0, 0, 0, 7.2, 0.9, 0.6, 0x8a2828));
+      [-1.35, 1.35].forEach(function (sx) {
+        softP.push(softPart(GEO.box, sx, 0.42, 0.9, 0, 0, 0, 1.45, 0.7, 1.35, 0x5a3a8a));
+        softP.push(softPart(GEO.box, sx, 1.12, 1.5, -0.14, 0, 0, 1.45, 1.25, 0.35, 0x5a3a8a));
+        softP.push(softPart(GEO.box, sx - 0.82, 0.82, 0.9, 0, 0, 0, 0.25, 0.75, 1.25, 0x4a2e72));
+        softP.push(softPart(GEO.box, sx + 0.82, 0.82, 0.9, 0, 0, 0, 0.25, 0.75, 1.25, 0x4a2e72));
+      });
+      woodP.push(part(GEO.cyl, 0, 0.85, 4.2, 0, 0, 0, 0.5, 1.7, 0.5, [1, 1]));
+      woodP.push(part(GEO.box, 0, 1.85, 4.2, 0, 0, 0, 1.1, 0.55, 1.3, [1, 1]));
+      var beam = new THREE.Mesh(new THREE.ConeGeometry(2.3, 9.4, 12, 1, true), coneMat);
+      beam.rotation.x = Math.PI / 2 + 0.02; // narrow at projector, wide at backdrop
+      beam.position.set(0, 2.1, -0.4);
+      beam.castShadow = false;
+      g.add(beam);
+    } else if (b.type === 'cottage') {
+      rugX = -2.2; rugZ = 1.2;
+      [-2.7, 0, 2.7].forEach(function (fx, fi) {
+        woodP.push(part(GEO.box, fx, 2.5, -RD / 2 + 0.22, 0, 0, 0, 2.1, 1.6, 0.14, [1, 1]));
+        photoP.push(part(GEO.plane, fx, 2.5, -RD / 2 + 0.31, 0, 0, 0, 1.8, 1.35, 1, [1 / 3, 1, fi / 3, 0]));
+      });
+      woodP.push(part(GEO.box, 3.8, 0.62, 1.4, 0, 0, 0, 2.3, 1.05, 1.25, [1, 1]));
+      woodP.push(part(GEO.box, 3.8, 1.22, 1.4, 0, 0, 0, 2.3, 0.3, 1.25, [1, 1]));
+      trimP.push(part(GEO.box, 3.1, 0.65, 1.4, 0, 0, 0, 0.16, 1.15, 1.31, [1, 1]));
+      trimP.push(part(GEO.box, 4.5, 0.65, 1.4, 0, 0, 0, 0.16, 1.15, 1.31, [1, 1]));
+      /* rocking chair (grounded, facing the room) */
+      woodP.push(part(GEO.box, -3.95, 0.08, 1.6, 0, 0, 0, 0.14, 0.1, 2.5, [1, 1]));
+      woodP.push(part(GEO.box, -2.85, 0.08, 1.6, 0, 0, 0, 0.14, 0.1, 2.5, [1, 1]));
+      woodP.push(part(GEO.box, -3.95, 0.42, 1.15, 0, 0, 0, 0.12, 0.7, 0.12, [1, 1]));
+      woodP.push(part(GEO.box, -3.95, 0.42, 2.05, 0, 0, 0, 0.12, 0.7, 0.12, [1, 1]));
+      woodP.push(part(GEO.box, -2.85, 0.42, 1.15, 0, 0, 0, 0.12, 0.7, 0.12, [1, 1]));
+      woodP.push(part(GEO.box, -2.85, 0.42, 2.05, 0, 0, 0, 0.12, 0.7, 0.12, [1, 1]));
+      woodP.push(part(GEO.box, -3.4, 0.8, 1.6, 0, 0, 0, 1.3, 0.14, 1.2, [1, 1]));
+      woodP.push(part(GEO.box, -3.4, 1.55, 1.02, -0.16, 0, 0, 1.3, 1.5, 0.14, [1, 1]));
+    } else if (b.type === 'house') {
+      rugX = -3.0; rugZ = 1.0;
+      woodP.push(part(GEO.box, 1.4, 0.7, -0.5, 0, 0, 0, 0.55, 1.4, 5.2, [1, 2]));
+      /* sofa facing the TV wall */
+      softP.push(softPart(GEO.box, -3.0, 0.42, 2.6, 0, 0, 0, 3.0, 0.7, 1.4, 0x3a7a8a));
+      softP.push(softPart(GEO.box, -3.0, 1.07, 3.25, 0, 0, 0, 3.0, 1.2, 0.4, 0x3a7a8a));
+      softP.push(softPart(GEO.box, -4.35, 0.82, 2.6, 0, 0, 0, 0.35, 0.8, 1.4, 0x2e626e));
+      softP.push(softPart(GEO.box, -1.65, 0.82, 2.6, 0, 0, 0, 0.35, 0.8, 1.4, 0x2e626e));
+      woodP.push(part(GEO.box, -3.0, 0.42, 0.9, 0, 0, 0, 1.8, 0.14, 0.9, [1, 1]));
+      woodP.push(part(GEO.box, -3.7, 0.2, 0.9, 0, 0, 0, 0.14, 0.4, 0.8, [1, 1]));
+      woodP.push(part(GEO.box, -2.3, 0.2, 0.9, 0, 0, 0, 0.14, 0.4, 0.8, [1, 1]));
+      /* TV console + screen */
+      woodP.push(part(GEO.box, -3.0, 0.5, -RD / 2 + 0.55, 0, 0, 0, 4.0, 1.0, 0.9, [2, 1]));
+      var tvCanvas = document.createElement('canvas'); tvCanvas.width = 128; tvCanvas.height = 96;
+      var tvCtx = tvCanvas.getContext('2d');
+      var tvTex = new THREE.CanvasTexture(tvCanvas);
+      tvTex.colorSpace = THREE.SRGBColorSpace;
+      drawTVOff(tvCtx);
+      var tvScreenMat = new THREE.MeshBasicMaterial({ map: tvTex });
+      extras.push({
+        parts: [part(GEO.plane, -3.0, 2.6, -RD / 2 + 0.18, 0, 0, 0, 3.5, 2.1, 1, [1, 1])],
+        mat: tvScreenMat, noShadow: true
+      });
+      /* tea table + tea set */
+      woodP.push(part(GEO.cyl, -0.9, 0.75, 1.4, 0, 0, 0, 1.6, 0.12, 1.6, [1, 1]));
+      woodP.push(part(GEO.cyl, -0.9, 0.38, 1.4, 0, 0, 0, 0.3, 0.75, 0.3, [1, 1]));
+      extras.push({
+        parts: [
+          part(GEO.box, -0.9, 0.86, 1.4, 0, 0, 0, 1.15, 0.07, 0.75, [1, 1]),
+          part(GEO.cyl, -1.15, 0.99, 1.3, 0, 0, 0, 0.32, 0.24, 0.32, [1, 1]),
+          part(GEO.cyl, -0.65, 0.99, 1.55, 0, 0, 0, 0.32, 0.24, 0.32, [1, 1])
+        ], mat: ceramicMat
+      });
+      var liqMesh = new THREE.Mesh(mergeGeos([
+        part(GEO.circle, -1.15, 1.1, 1.3, -Math.PI / 2, 0, 0, 0.26, 0.26, 1, [1, 1]),
+        part(GEO.circle, -0.65, 1.1, 1.55, -Math.PI / 2, 0, 0, 0.26, 0.26, 1, [1, 1])
+      ]), teaMat);
+      liqMesh.visible = false;
+      g.add(liqMesh);
+      /* bed with blanket + pillows */
+      woodP.push(part(GEO.box, 4.0, 0.45, -2.2, 0, 0, 0, 3.4, 0.9, 4.8, [2, 2]));
+      woodP.push(part(GEO.box, 4.0, 1.3, -4.5, 0, 0, 0, 3.4, 1.6, 0.25, [1, 1]));
+      softP.push(softPart(GEO.box, 4.0, 1.0, -2.2, 0, 0, 0, 3.2, 0.5, 4.6, 0xe8e0d0));
+      softP.push(softPart(GEO.box, 4.0, 1.25, -1.4, 0, 0, 0, 3.25, 0.28, 2.6, 0xc96a7a));
+      softP.push(softPart(GEO.box, 3.2, 1.35, -3.9, 0, 0, 0, 1.2, 0.35, 0.9, 0xf5f0e6));
+      softP.push(softPart(GEO.box, 4.8, 1.35, -3.9, 0, 0, 0, 1.2, 0.35, 0.9, 0xf5f0e6));
+      /* kitchen corner + kettle */
+      woodP.push(part(GEO.box, 4.6, 0.6, 3.4, 0, 0, 0, 2.6, 1.2, 1.1, [1, 1]));
+      woodP.push(part(GEO.box, 4.6, 1.26, 3.4, 0, 0, 0, 2.7, 0.1, 1.2, [1, 1]));
+      trimP.push(part(GEO.box, 2.6, 0.55, 3.4, 0, 0, 0, 1.4, 1.1, 1.1, [1, 1]));
+      extras.push({
+        parts: [
+          part(GEO.cyl, 2.6, 1.5, 3.4, 0, 0, 0, 0.85, 0.75, 0.85, [1, 1]),
+          part(GEO.cyl, 2.6, 1.95, 3.4, 0, 0, 0, 0.5, 0.18, 0.5, [1, 1]),
+          part(GEO.sph, 2.6, 2.08, 3.4, 0, 0, 0, 0.16, 0.16, 0.16, [1, 1]),
+          part(GEO.cyl, 3.05, 1.62, 3.4, 0, 0, -0.7, 0.18, 0.6, 0.18, [1, 1])
+        ], mat: metalMat
+      });
+      /* interactions */
+      var teaState = { brewing: false, steamUntil: 0, liquid: liqMesh, it: null };
+      addSmokeEmitter(cx + 2.9, 2.35, cz + 3.4, {
+        rate: 26, life: 1.5, vy: 1.5, size: 0.45, grow: 2.4, alpha: 0.5,
+        active: function () { return performance.now() < teaState.steamUntil; }
+      });
+      var teaIt = {
+        x: cx - 0.9, z: cz + 1.4, r: 3.2, label: '🍵 Make tea',
+        action: function () { doTea(teaState); }
+      };
+      teaState.it = teaIt;
+      interactables.push(teaIt);
+      var tvState = { watching: false, lastDraw: 0, tex: tvTex, ctx: tvCtx, rand: mulberry32(900 + idx), it: null };
+      var tvIt = {
+        x: cx - 3.0, z: cz - 3.4, r: 3.6, label: '📺 Watch TV',
+        action: function () { toggleTV(tvState); }
+      };
+      tvState.it = tvIt;
+      tvStates.push(tvState);
+      interactables.push(tvIt);
+      interactables.push({
+        x: cx + 4.0, z: cz + 0.8, r: 3.4, label: '😴 Sleep',
+        action: function () { doSleep(); }
+      });
+    }
+
+    /* rug */
+    var rug = new THREE.Mesh(mergeGeos([part(GEO.circle, 0, 0, 0, -Math.PI / 2, 0, 0, 4.6, 4.6, 1, [1, 1])]), rugMat);
+    rug.position.set(rugX, 0.03, rugZ);
+    rug.receiveShadow = true;
+    g.add(rug);
+
+    /* merged prop meshes */
+    function addMerged(parts, mat, noShadow) {
+      if (!parts.length) return;
+      var m = new THREE.Mesh(mergeGeos(parts), mat);
+      m.castShadow = !noShadow; m.receiveShadow = true;
+      g.add(m);
+    }
+    addMerged(woodP, wallMat);
+    addMerged(softP, fabricMat);
+    addMerged(trimP, trimMat);
+    addMerged(photoP, photoMat);
+    extras.forEach(function (ex) { addMerged(ex.parts, ex.mat, ex.noShadow); });
+
+    /* exit door prompt (inside, in front of the door) */
+    interactables.push({
+      x: cx, z: cz + 3.6, r: 4.2, label: '🚪 Exit',
+      action: function () { exitInterior(b); }
+    });
+
+    g.traverse(function (o) { if (o.isMesh) { o.castShadow = true; o.receiveShadow = true; } });
+    var room = { cx: cx, cz: cz, lampLight: lampLight };
+    rooms.push(room);
+    interiorZones.push({ x0: cx - RW / 2, x1: cx + RW / 2, z0: cz - RD / 2, z1: cz + RD / 2, y: 0.02, room: room });
+    registerChunk(g, cx, cz);
+  }
+
+  /* ---- prompt system (DOM button bottom-center + E key; later phases reuse) ---- */
+  var promptEl = document.createElement('button');
+  promptEl.style.cssText = 'position:fixed;left:50%;bottom:30px;transform:translateX(-50%);' +
+    'z-index:30;display:none;cursor:pointer;max-width:86vw;' +
+    'font:600 17px Georgia,serif;color:#ffe9b8;background:rgba(46,26,14,0.88);' +
+    'border:2px solid rgba(255,200,120,0.65);border-radius:999px;padding:15px 30px;' +
+    'box-shadow:0 4px 18px rgba(0,0,0,0.45);touch-action:manipulation;';
+  document.body.appendChild(promptEl);
+  var promptShownLabel = null;
+  function showPrompt(label, onAction) {
+    promptShownLabel = label; promptAction = onAction || null;
+    promptEl.textContent = '';
+    promptEl.appendChild(document.createTextNode(label + '   '));
+    var k = document.createElement('span');
+    k.style.cssText = 'opacity:0.65;font-size:13px;border:1px solid rgba(255,233,184,0.5);' +
+      'border-radius:6px;padding:2px 8px;';
+    k.textContent = 'E';
+    promptEl.appendChild(k);
+    promptEl.style.display = 'block';
+  }
+  function hidePrompt() {
+    promptEl.style.display = 'none'; promptAction = null; promptShownLabel = null;
+  }
+  promptEl.addEventListener('click', function () { if (promptAction) promptAction(); });
+  var currentInteract = null;
+  function updatePrompts() {
+    if (promptLocked) return; // Phase 4: exclusive prompt (Dismount/Exit/Stand up) stays put
+    var best = null, bd = 1e9;
+    for (var i = 0; i < interactables.length; i++) {
+      var it = interactables[i];
+      if (it.disabled) continue; // Phase 4: e.g. ridden bike / boarded wheel
+      var dx = player.position.x - it.x, dz = player.position.z - it.z;
+      var d = Math.sqrt(dx * dx + dz * dz);
+      if (d < it.r && d < bd) { bd = d; best = it; }
+    }
+    if (best !== currentInteract || (best && best.label !== promptShownLabel)) {
+      currentInteract = best;
+      if (best) showPrompt(best.label, best.action); else hidePrompt();
+    }
+  }
+
+  /* ---- fade overlay + teleport ---- */
+  var fadeEl = document.createElement('div');
+  fadeEl.style.cssText = 'position:fixed;inset:0;background:#000;opacity:0;pointer-events:none;' +
+    'z-index:40;transition:opacity 0.85s ease;';
+  document.body.appendChild(fadeEl);
+  function fadeTo(black, dur, cb) {
+    fadeEl.style.transition = 'opacity ' + dur + 's ease';
+    fadeEl.style.opacity = black ? '1' : '0';
+    if (cb) setTimeout(cb, dur * 1000 + 60);
+  }
+  function fadeTeleport(cb) { fadeTo(true, 0.22, function () { cb(); fadeTo(false, 0.35); }); }
+  function enterInterior(b) {
+    hidePrompt();
+    fadeTeleport(function () {
+      player.position.set(b.ix, 0.2, b.iz + 3.0);
+      playerYaw = targetYaw = Math.PI; player.rotation.y = Math.PI;
+      orbit.yaw = Math.PI;
+    });
+  }
+  function exitInterior(b) {
+    hidePrompt();
+    fadeTeleport(function () {
+      player.position.set(b.door.x + b.fx * 3.2, b.gy + 0.6, b.door.z + b.fz * 3.2);
+      var yw = Math.atan2(b.fx, b.fz);
+      playerYaw = targetYaw = yw; player.rotation.y = yw;
+      orbit.yaw = yw;
+    });
+  }
+
+  /* ---- interior interactions ---- */
+  var sleeping = false;
+  function doSleep() {
+    if (sleeping) return; sleeping = true; hidePrompt();
+    fadeTo(true, 0.9, function () {
+      setTimeout(function () {
+        manualHour = 7.5; // wake to morning light
+        fadeTo(false, 1.1, function () { sleeping = false; });
+      }, 1200);
+    });
+  }
+  function doTea(st) {
+    if (st.brewing) return;
+    st.brewing = true;
+    st.steamUntil = performance.now() + 4000;
+    setTimeout(function () {
+      st.brewing = false;
+      st.liquid.visible = true;
+      st.it.label = '🍵 Pour more tea';
+      if (currentInteract === st.it) showPrompt(st.it.label, st.it.action);
+    }, 4100);
+  }
+  function drawTVOff(g2) {
+    g2.fillStyle = '#0e1420'; g2.fillRect(0, 0, 128, 96);
+    g2.fillStyle = 'rgba(120,160,200,0.25)'; g2.fillRect(10, 10, 50, 76);
+  }
+  function drawTVStatic(st) {
+    try {
+      var g2 = st.ctx, W = 128, H = 96, r = st.rand;
+      var img = g2.createImageData(W, H), dd = img.data;
+      for (var i = 0; i < dd.length; i += 4) {
+        var v = (r() * 255) | 0;
+        dd[i] = v; dd[i + 1] = v; dd[i + 2] = v; dd[i + 3] = 255;
+      }
+      g2.putImageData(img, 0, 0);
+      st.tex.needsUpdate = true;
+    } catch (e) { /* headless stub */ }
+  }
+  function toggleTV(st) {
+    st.watching = !st.watching;
+    if (!st.watching) drawTVOff(st.ctx);
+    st.it.label = st.watching ? '📺 Turn off TV' : '📺 Watch TV';
+    if (currentInteract === st.it) showPrompt(st.it.label, st.it.action);
+  }
+
+  /* ---- per-frame Phase 2 update: smoke, prompts, lamp lights, TV ---- */
+  var p2frame = 0;
+  function updatePhase2(dt, t) {
+    updateSmoke(dt);
+    if ((p2frame++ % 6) === 0) updatePrompts();
+    for (var i = 0; i < rooms.length; i++) {
+      var rm = rooms[i];
+      var near = Math.hypot(player.position.x - rm.cx, player.position.z - rm.cz) < 45;
+      if (rm.lampLight.visible !== near) rm.lampLight.visible = near;
+    }
+    for (var ti = 0; ti < tvStates.length; ti++) {
+      var st = tvStates[ti];
+      if (st.watching && t - st.lastDraw > 0.12) { st.lastDraw = t; drawTVStatic(st); }
+    }
+  }
+
+  /* ---- build all interiors, then bake the instanced meshes ---- */
+  BUILDINGS.forEach(function (b, bi) { buildInterior(b, bi); });
+  winFrameI.build(); winPaneI.build(); postI.build(); crateI.build(); handleI.build();
+  planterI.build(); flowerI.build(); leafI.build(); bookI.build(); jarI.build();
+
   /* bridge night lights (2 point lights, intensity lerped by darkness) */
   var bridgeLights = [];
   [-BRIDGE_HALF / 2, BRIDGE_HALF / 2].forEach(function (x) {
@@ -694,41 +1771,796 @@ function init(canvasId) {
   var fireflies = new THREE.Points(fireflyGeo, fireflyMat);
   scene.add(fireflies);
 
-  /* ---------------- placeholder player ---------------- */
-  var player = new THREE.Group();
-  var bodyMat = new THREE.MeshStandardMaterial({ color: 0x4a9a8a, roughness: 0.7 });
-  var body = new THREE.Mesh(new THREE.CapsuleGeometry(0.62, 1.15, 6, 12), bodyMat);
-  body.position.y = 1.15; body.castShadow = true;
-  player.add(body);
-  var headMat = new THREE.MeshStandardMaterial({ color: 0xf2c89b, roughness: 0.7 });
-  var head = new THREE.Mesh(new THREE.SphereGeometry(0.5, 14, 12), headMat);
-  head.position.y = 2.35; head.castShadow = true;
-  player.add(head);
-  /* name label */
-  var labelCanvas = document.createElement('canvas');
-  labelCanvas.width = 256; labelCanvas.height = 64;
-  (function () {
-    var g = labelCanvas.getContext('2d');
-    g.font = 'bold 34px Georgia'; g.textAlign = 'center';
-    g.fillStyle = 'rgba(0,0,0,0.45)'; g.fillText('You', 128, 42);
-    g.fillStyle = '#fff8ec'; g.fillText('You', 128, 40);
+  /* ================= Phase 3: characters ================= */
+  /* Procedural Pixar-style BOY (player) + GIRL (partner Tara), ~2.8u tall.
+     Built from merged primitive parts + shared materials/geometries:
+     boy = 20 draw calls, girl = 19 -> 39 total for both characters. */
+  var CHSPH = new THREE.SphereGeometry(0.5, 20, 16);    // hero surfaces
+  var CHSPH_LO = new THREE.SphereGeometry(0.5, 12, 10); // small merged bits
+  var CHCYL = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+  var CHMAT = {
+    skin:   new THREE.MeshStandardMaterial({ color: 0xb07a4f, roughness: 0.62 }),
+    hair:   new THREE.MeshStandardMaterial({ color: 0x25201b, roughness: 0.58 }),
+    eyeW:   new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.32 }),
+    pupil:  new THREE.MeshStandardMaterial({ color: 0x26211d, roughness: 0.28 }),
+    mouth:  new THREE.MeshStandardMaterial({ color: 0x7c4634, roughness: 0.60 }),
+    brow:   new THREE.MeshStandardMaterial({ color: 0x25201b, roughness: 0.60 }),
+    boySw:  new THREE.MeshStandardMaterial({ color: 0x6d7f3c, roughness: 0.75 }), // olive sweater
+    boyHem: new THREE.MeshStandardMaterial({ color: 0xf2ede2, roughness: 0.75 }), // white trim
+    boyPn:  new THREE.MeshStandardMaterial({ color: 0x3b4048, roughness: 0.80 }), // charcoal pants
+    boySh:  new THREE.MeshStandardMaterial({ color: 0x717177, roughness: 0.70 }), // gray shoes
+    grlSw:  new THREE.MeshStandardMaterial({ color: 0xe89a90, roughness: 0.78 }), // salmon sweater
+    grlCb:  new THREE.MeshStandardMaterial({ color: 0xd47f76, roughness: 0.78 }), // cable knit
+    grlPn:  new THREE.MeshStandardMaterial({ color: 0x2c3550, roughness: 0.80 }), // navy pants
+    grlBt:  new THREE.MeshStandardMaterial({ color: 0xf4eee1, roughness: 0.60 })  // cream boots
+  };
+  var CHGEO = {};
+  function _torusY(r, tube, y) {
+    return part(new THREE.TorusGeometry(r, tube, 10, 22), 0, y, 0, Math.PI / 2, 0, 0, 1, 1, 1);
+  }
+  /* ---- shared geometries: head, face, limbs (boy + girl reuse) ---- */
+  (function buildSharedCharGeos() {
+    var hp = [part(CHSPH, 0, 0, 0, 0, 0, 0, 0.68, 0.70, 0.63)]; // skull
+    hp.push(part(CHSPH_LO, 0.315, 0, -0.02, 0, 0, 0, 0.17, 0.17, 0.17)); // ear R
+    hp.push(part(CHSPH_LO, -0.315, 0, -0.02, 0, 0, 0, 0.17, 0.17, 0.17)); // ear L
+    hp.push(part(CHSPH_LO, 0, -0.03, 0.315, 0, 0, 0, 0.10, 0.10, 0.10)); // nose
+    hp.push(part(CHCYL, 0, -0.40, 0, 0, 0, 0, 0.22, 0.20, 0.22)); // neck
+    CHGEO.head = mergeGeos(hp);
+    CHGEO.eyeW = mergeGeos([ // eye whites (one mesh, blinks as a pair)
+      part(CHSPH_LO, 0.135, 0, 0.02, 0, 0, 0, 0.176, 0.20, 0.11),
+      part(CHSPH_LO, -0.135, 0, 0.02, 0, 0, 0, 0.176, 0.20, 0.11)]);
+    CHGEO.pupil = mergeGeos([
+      part(CHSPH_LO, 0.135, 0.005, 0.078, 0, 0, 0, 0.084, 0.084, 0.05),
+      part(CHSPH_LO, -0.135, 0.005, 0.078, 0, 0, 0, 0.084, 0.084, 0.05)]);
+    CHGEO.brows = mergeGeos([
+      part(GEO.box, 0.145, 0.20, 0.27, 0, 0, -0.10, 0.15, 0.035, 0.04),
+      part(GEO.box, -0.145, 0.20, 0.27, 0, 0, 0.10, 0.15, 0.035, 0.04)]);
+    var sm = new THREE.TorusGeometry(0.10, 0.024, 8, 20, Math.PI); // smile arc
+    sm.rotateZ(Math.PI); sm.rotateX(-0.18); sm.translate(0, -0.12, 0.295);
+    CHGEO.smile = sm.index ? sm.toNonIndexed() : sm;
+    // arm: upper + forearm capsules with a gentle elbow bend (shoulder-pivot space)
+    CHGEO.arm = mergeGeos([
+      part(new THREE.CapsuleGeometry(0.125, 0.30, 4, 10), 0, -0.20, 0, 0, 0, 0, 1, 1, 1),
+      part(new THREE.CapsuleGeometry(0.105, 0.28, 4, 10), 0.015, -0.50, 0.035, 0.10, 0, -0.05, 1, 1, 1)]);
+    CHGEO.hand = mergeGeos([part(CHSPH_LO, 0.03, -0.74, 0.06, 0, 0, 0, 0.23, 0.25, 0.23)]);
+    CHGEO.thigh = mergeGeos([part(new THREE.CapsuleGeometry(0.15, 0.42, 4, 10), 0, -0.28, 0, 0, 0, 0, 1, 1, 1)]);
+    CHGEO.shin = mergeGeos([part(new THREE.CapsuleGeometry(0.125, 0.50, 4, 10), 0, -0.72, 0.005, 0, 0, 0, 1, 1, 1)]);
   })();
-  var labelTex = new THREE.CanvasTexture(labelCanvas);
-  var label = new THREE.Sprite(new THREE.SpriteMaterial({ map: labelTex, transparent: true, depthWrite: false }));
-  label.scale.set(3.4, 0.85, 1);
-  label.position.y = 3.35;
-  player.add(label);
+  /* ---- per-character geometries: torsos, trim, hair, footwear ---- */
+  (function buildVariantCharGeos() {
+    CHGEO.boyTorso = mergeGeos([ // olive sweater: tapered body + rounded shoulders + collar
+      part(new THREE.CylinderGeometry(0.40, 0.33, 0.80, 16), 0, 1.66, 0, 0, 0, 0, 1, 1, 1),
+      part(CHSPH_LO, 0.37, 1.97, 0, 0, 0, 0, 0.38, 0.38, 0.38),
+      part(CHSPH_LO, -0.37, 1.97, 0, 0, 0, 0, 0.38, 0.38, 0.38),
+      _torusY(0.21, 0.055, 2.03)]);
+    CHGEO.boyHem = mergeGeos([ // white hem band + neck trim (matches sheet)
+      part(new THREE.CylinderGeometry(0.345, 0.335, 0.10, 16), 0, 1.32, 0, 0, 0, 0, 1, 1, 1),
+      _torusY(0.15, 0.04, 2.045)]);
+    CHGEO.grlTorso = mergeGeos([ // salmon sweater, slightly slimmer
+      part(new THREE.CylinderGeometry(0.37, 0.30, 0.78, 16), 0, 1.65, 0, 0, 0, 0, 1, 1, 1),
+      part(CHSPH_LO, 0.34, 1.95, 0, 0, 0, 0, 0.36, 0.36, 0.36),
+      part(CHSPH_LO, -0.34, 1.95, 0, 0, 0, 0, 0.36, 0.36, 0.36),
+      _torusY(0.19, 0.05, 2.01)]);
+    CHGEO.grlCables = mergeGeos([ // cable-knit rings around the sweater
+      _torusY(0.328, 0.02, 1.45), _torusY(0.348, 0.02, 1.65), _torusY(0.362, 0.02, 1.85)]);
+    var puffs = [ // boy's curly hair: clustered puffs (head-local)
+      [0, 0.30, 0.03, 0.30], [0.17, 0.26, 0.08, 0.28], [-0.17, 0.26, 0.08, 0.28],
+      [0.28, 0.18, -0.02, 0.28], [-0.28, 0.18, -0.02, 0.28],
+      [0.10, 0.30, -0.14, 0.30], [-0.10, 0.30, -0.14, 0.30],
+      [0.22, 0.22, -0.20, 0.26], [-0.22, 0.22, -0.20, 0.26],
+      [0, 0.24, -0.30, 0.28],
+      [0.13, 0.34, 0.16, 0.24], [-0.13, 0.34, 0.16, 0.24]];
+    CHGEO.boyHair = mergeGeos(puffs.map(function (p) {
+      return part(CHSPH_LO, p[0], p[1], p[2], 0, 0, 0, p[3], p[3] * 0.9, p[3]);
+    }));
+    CHGEO.grlCap = mergeGeos([ // girl's hair cap + forehead framing (sits behind the face plane)
+      part(CHSPH, 0, 0.03, -0.12, 0, 0, 0, 0.75, 0.77, 0.75),
+      part(CHSPH_LO, 0.20, 0.22, 0.18, 0, 0, 0, 0.26, 0.26, 0.26),
+      part(CHSPH_LO, -0.20, 0.22, 0.18, 0, 0, 0, 0.26, 0.26, 0.26),
+      part(CHSPH_LO, 0, 0.33, 0.06, 0, 0, 0, 0.30, 0.22, 0.28)]);
+    var bpts = [ // girl's side braid: tapered tube down her right side
+      new THREE.Vector3(0.30, 0.16, -0.04), new THREE.Vector3(0.345, -0.12, 0.03),
+      new THREE.Vector3(0.36, -0.42, 0.08), new THREE.Vector3(0.345, -0.72, 0.10),
+      new THREE.Vector3(0.32, -1.00, 0.10), new THREE.Vector3(0.30, -1.22, 0.08)];
+    var bp = [part(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(bpts), 16, 0.088, 10),
+      0, 0, 0, 0, 0, 0, 1, 1, 1)];
+    var taper = [0.080, 0.068, 0.056, 0.044];
+    for (var bi = 0; bi < 4; bi++) {
+      var q = bpts[2 + bi];
+      bp.push(part(CHSPH_LO, q.x, q.y, q.z, 0, 0, 0, taper[bi] * 2, taper[bi] * 2, taper[bi] * 2));
+    }
+    CHGEO.grlBraid = mergeGeos(bp);
+    CHGEO.shoe = mergeGeos([ // boy's gray shoes: box + rounded toe (hip-pivot space)
+      part(GEO.box, 0, -1.22, 0.08, 0, 0, 0, 0.30, 0.22, 0.46),
+      part(CHSPH_LO, 0, -1.23, 0.28, 0, 0, 0, 0.26, 0.20, 0.26)]);
+    CHGEO.boot = mergeGeos([ // girl's tall cream boots: shaft + foot + toe
+      part(new THREE.CylinderGeometry(0.155, 0.175, 0.68, 12), 0, -0.94, 0, 0, 0, 0, 1, 1, 1),
+      part(GEO.box, 0, -1.26, 0.07, 0, 0, 0, 0.28, 0.18, 0.44),
+      part(CHSPH_LO, 0, -1.27, 0.26, 0, 0, 0, 0.24, 0.17, 0.24)]);
+  })();
+
+  function makeCharLabel(text) {
+    var c = document.createElement('canvas'); c.width = 256; c.height = 64;
+    var g2 = c.getContext('2d');
+    g2.font = 'bold 34px Georgia'; g2.textAlign = 'center';
+    g2.fillStyle = 'rgba(0,0,0,0.45)'; g2.fillText(text, 128, 42);
+    g2.fillStyle = '#fff8ec'; g2.fillText(text, 128, 40);
+    var tex = new THREE.CanvasTexture(c);
+    var sp = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    sp.scale.set(3.4, 0.85, 1); sp.position.y = 3.32;
+    return sp;
+  }
+  var charGlowTex = createGlowTexture('rgba(255,196,120,0.85)', 'rgba(255,150,60,0)');
+  var charGlowMat = new THREE.MeshBasicMaterial({ map: charGlowTex, transparent: true, depthWrite: false, opacity: 0.5 });
+
+  /* Builds a fully rigged character.
+     opt: {name, girl, sweater, pants, torsoGeo, trimGeo, trimMat,
+           hairGeo, hairGeo2, legLowMat} — boy: shin+shoe, girl: boot (legLowGeo) */
+  function buildCharacter(opt) {
+    var group = new THREE.Group();   // world position + yaw
+    var rig = new THREE.Group();     // walk bob + forward lean
+    group.add(rig);
+    function M(geo, mat) { var m = new THREE.Mesh(geo, mat); m.castShadow = true; rig.add(m); return m; }
+    var torso = M(opt.torsoGeo, opt.sweater);
+    if (opt.trimGeo) M(opt.trimGeo, opt.trimMat);
+    var headG = new THREE.Group(); headG.position.set(0, 2.38, 0); rig.add(headG);
+    function HM(geo, mat) { var m = new THREE.Mesh(geo, mat); m.castShadow = true; headG.add(m); return m; }
+    HM(CHGEO.head, CHMAT.skin);
+    var eyeG = new THREE.Group(); eyeG.position.set(0, 0.06, 0.26); headG.add(eyeG);
+    eyeG.add(new THREE.Mesh(CHGEO.eyeW, CHMAT.eyeW));   // no shadow: tiny
+    eyeG.add(new THREE.Mesh(CHGEO.pupil, CHMAT.pupil));  // no shadow: tiny
+    HM(CHGEO.brows, CHMAT.brow);
+    HM(CHGEO.smile, CHMAT.mouth);
+    HM(opt.hairGeo, CHMAT.hair);
+    if (opt.hairGeo2) HM(opt.hairGeo2, CHMAT.hair);
+    function arm(side) { // shoulder pivot; arm hangs -y, character faces +z
+      var piv = new THREE.Group(); piv.position.set(0.47 * side, 1.94, 0); rig.add(piv);
+      var a = new THREE.Mesh(CHGEO.arm, opt.sweater); a.castShadow = true; piv.add(a);
+      var h = new THREE.Mesh(CHGEO.hand, CHMAT.skin); h.castShadow = true; piv.add(h);
+      piv.rotation.z = 0.10 * side;
+      return piv;
+    }
+    var shL = arm(-1), shR = arm(1);
+    function leg(side) { // hip pivot
+      var piv = new THREE.Group(); piv.position.set(0.22 * side, 1.34, 0); rig.add(piv);
+      var t = new THREE.Mesh(CHGEO.thigh, opt.pants); t.castShadow = true; piv.add(t);
+      if (opt.girl) {
+        var b = new THREE.Mesh(CHGEO.boot, opt.legLowMat); b.castShadow = true; piv.add(b);
+      } else {
+        var s = new THREE.Mesh(CHGEO.shin, opt.pants); s.castShadow = true; piv.add(s);
+        var f = new THREE.Mesh(CHGEO.shoe, opt.legLowMat); f.castShadow = true; piv.add(f);
+      }
+      return piv;
+    }
+    var hipL = leg(-1), hipR = leg(1);
+    var glow = new THREE.Mesh(GEO.circle, charGlowMat); // warm ground glow
+    glow.rotation.x = -Math.PI / 2; glow.position.y = 0.12; glow.scale.set(5.5, 5.5, 1);
+    group.add(glow);
+    group.add(makeCharLabel(opt.name));
+    return {
+      group: group, rig: rig, torso: torso, headG: headG, eyeG: eyeG,
+      shL: shL, shR: shR, hipL: hipL, hipR: hipR,
+      phase: 0, blinkT: 2 + Math.random() * 2.5, blinkCd: 0, blinked: false, lean: 0
+    };
+  }
+
+  /* ---- player = the BOY ---- */
+  var playerRig = buildCharacter({
+    name: 'You', girl: false, sweater: CHMAT.boySw, pants: CHMAT.boyPn,
+    torsoGeo: CHGEO.boyTorso, trimGeo: CHGEO.boyHem, trimMat: CHMAT.boyHem,
+    hairGeo: CHGEO.boyHair, legLowMat: CHMAT.boySh
+  });
+  var player = playerRig.group;
+  /* ---- partner = the GIRL (Tara) ---- */
+  var partnerRig = buildCharacter({
+    name: 'Tara', girl: true, sweater: CHMAT.grlSw, pants: CHMAT.grlPn,
+    torsoGeo: CHGEO.grlTorso, trimGeo: CHGEO.grlCables, trimMat: CHMAT.grlCb,
+    hairGeo: CHGEO.grlCap, hairGeo2: CHGEO.grlBraid,
+    legLowGeo: CHGEO.boot, legLowMat: CHMAT.grlBt
+  });
+  var partner = partnerRig.group;
   var startX = ISL_A.cx + 32, startZ = 12;
   player.position.set(startX, groundHeight(startX, startZ), startZ);
-  scene.add(player);
-  var playerYaw = 0, targetYaw = 0;
+  var pStartX = startX + 3.2, pStartZ = startZ + 2.6;
+  partner.position.set(pStartX, groundHeight(pStartX, pStartZ), pStartZ);
+  scene.add(player); scene.add(partner);
+  var playerYaw = 0, targetYaw = 0, partnerYaw = 0;
+  partnerYaw = Math.atan2(startX - pStartX, startZ - pStartZ);
+  partner.rotation.y = partnerYaw;
+
+  /* ---- walk / idle animation shared by player + partner ----
+     Stride is matched to travel speed (stride 1.6u): no foot sliding. */
+  function updateCharacterAnim(c, dt, t, moving, speed) {
+    var k = 1 - Math.exp(-dt * 10);
+    if (moving) {
+      var w = Math.PI * speed / 1.6; // full leg cycle per 2 steps
+      c.phase += w * dt;
+      var s = Math.sin(c.phase);
+      c.hipL.rotation.x = s * 0.55;
+      c.hipR.rotation.x = -s * 0.55;
+      c.shL.rotation.x = -s * 0.45; // arms oppose legs
+      c.shR.rotation.x = s * 0.45;
+      c.rig.position.y = Math.abs(Math.cos(c.phase)) * 0.07; // bob, 2x per cycle
+      c.lean = lerp(c.lean, 0.07, 1 - Math.exp(-dt * 6)); // slight forward lean
+      c.torso.scale.set(1, 1, 1);
+    } else {
+      c.hipL.rotation.x = lerp(c.hipL.rotation.x, 0, k);
+      c.hipR.rotation.x = lerp(c.hipR.rotation.x, 0, k);
+      c.shL.rotation.x = lerp(c.shL.rotation.x, 0, k);
+      c.shR.rotation.x = lerp(c.shR.rotation.x, 0, k);
+      c.shL.rotation.z = lerp(c.shL.rotation.z, -0.10, k);
+      c.shR.rotation.z = lerp(c.shR.rotation.z, 0.10, k);
+      c.rig.position.y = lerp(c.rig.position.y, 0, k);
+      c.lean = lerp(c.lean, 0, k);
+      var br = Math.sin(t * 1.9); // breathing
+      c.torso.scale.set(1 - br * 0.008, 1 + br * 0.015, 1 - br * 0.008);
+    }
+    c.rig.rotation.x = c.lean;
+    c.headG.rotation.y = Math.sin(t * 0.6) * 0.07;      // gentle head sway
+    c.headG.rotation.z = Math.sin(t * 0.43 + 1.0) * 0.03;
+    c.blinkT -= dt;                                     // blink every 3-5.5s
+    if (c.blinkT <= 0) { c.blinkCd = 0.12; c.blinkT = 3 + Math.random() * 2.5; c.blinked = true; }
+    if (c.blinkCd > 0) { c.blinkCd -= dt; c.eyeG.scale.y = 0.12; }
+    else c.eyeG.scale.y = 1;
+  }
+
+  /* ---------------- partner (Tara) AI ---------------- */
+  var partnerOnline = true, partnerSeeking = true;
+  var porchB = (function () { // her island's Couple's House porch (offline spot)
+    for (var i = 0; i < BUILDINGS.length; i++) {
+      var b = BUILDINGS[i];
+      if (b.side === 'B' && b.type === 'house') {
+        var sp = BTYPES[b.type];
+        return { x: b.x + b.fx * (sp.d / 2 + 1.8), z: b.z + b.fz * (sp.d / 2 + 1.8) };
+      }
+    }
+    return { x: ISL_B.cx + 32, z: 12 };
+  })();
+  function setPartnerOnline(b) {
+    partnerOnline = !!b;
+    partnerSeeking = true;
+  }
+  function updatePartner(dt, t) {
+    var pp = partner.position;
+    if (partnerHold) { // Phase 4: sitting with the player at the campfire (AI paused)
+      if (partnerSit && !partnerSit.seated) {
+        var dx = partnerSit.x - pp.x, dz = partnerSit.z - pp.z, d = Math.hypot(dx, dz);
+        var moving = false;
+        if (d > 0.5) {
+          var st = stepMover(pp.x, pp.z, dx / d, dz / d, 8, dt);
+          pp.x = st.x; pp.z = st.z; moving = st.moved;
+          if (st.moved) {
+            var ty = Math.atan2(dx / d, dz / d), dy2 = ty - partnerYaw;
+            while (dy2 > Math.PI) dy2 -= Math.PI * 2;
+            while (dy2 < -Math.PI) dy2 += Math.PI * 2;
+            partnerYaw += dy2 * (1 - Math.exp(-dt * 8));
+            partner.rotation.y = partnerYaw;
+          }
+        } else {
+          partnerSit.seated = true;
+          partnerYaw = partnerSit.yaw; partner.rotation.y = partnerYaw;
+        }
+        var gy = walkHeight(pp.x, pp.z);
+        if (gy > -900) pp.y = lerp(pp.y, gy, 1 - Math.exp(-dt * 10));
+        updateCharacterAnim(partnerRig, dt, t, moving, 8);
+      } else if (partnerSit && partnerSit.seated) {
+        applySitPose(partnerRig, dt, -0.55);
+      }
+      return;
+    }
+    var tx0 = partnerOnline ? player.position.x : porchB.x;
+    var tz0 = partnerOnline ? player.position.z : porchB.z;
+    /* route across the hanging bridge (z ~= 0, x in [-50, 50]) when target is
+       on the other island; straight-line walk would hit water otherwise */
+    var tx = tx0, tz = tz0;
+    var cross = (pp.x < -5 && tx0 > 5) || (pp.x > 5 && tx0 < -5);
+    if (cross) {
+      var fromB = pp.x > 5;
+      var nmx = fromB ? 46 : -46, fmx = fromB ? -46 : 46;
+      var onBr = Math.abs(pp.z) < 5 && pp.x > -50 && pp.x < 50;
+      var atNear = Math.hypot(pp.x - nmx, pp.z) < 7;
+      if (onBr || atNear) { tx = fmx; tz = 0; }
+      else { tx = nmx; tz = 0; }
+      if (Math.hypot(pp.x - fmx, pp.z) < 9) { tx = tx0; tz = tz0; }
+    }
+    var dx = tx - pp.x, dz = tz - pp.z;
+    var d = Math.hypot(dx, dz);
+    var stopR = partnerOnline ? 2.5 : 1.2, goR = partnerOnline ? 4 : 1.6;
+    if (partnerSeeking && d < stopR) partnerSeeking = false;
+    else if (!partnerSeeking && d > goR) partnerSeeking = true;
+    var moving = false;
+    if (partnerSeeking && d > 0.05) {
+      var sp = partnerOnline ? 10.2 : 7;
+      var st = stepMover(pp.x, pp.z, dx / d, dz / d, sp, dt);
+      pp.x = st.x; pp.z = st.z; moving = st.moved;
+      if (st.moved) { // smooth yaw toward travel direction
+        var ty = Math.atan2(dx / d, dz / d), dy2 = ty - partnerYaw;
+        while (dy2 > Math.PI) dy2 -= Math.PI * 2;
+        while (dy2 < -Math.PI) dy2 += Math.PI * 2;
+        partnerYaw += dy2 * (1 - Math.exp(-dt * 8));
+        partner.rotation.y = partnerYaw;
+      }
+    }
+    var gy = walkHeight(pp.x, pp.z);
+    if (gy > -900) pp.y = lerp(pp.y, gy, 1 - Math.exp(-dt * 10));
+    updateCharacterAnim(partnerRig, dt, t, moving, 10.2);
+  }
+  /* ================= PHASE 4: interactive objects =================
+     Sky wheels (rideable), docks + rowboats, rideable bicycles,
+     campfire sitting. Shared geometries/materials throughout;
+     ~40 new draw calls total (budget < 60). */
+  var speedMult = 1;               // Phase 4: bicycle speed multiplier (updatePlayer)
+  var movementLocked = false;      // sitting / wheel riding: walk input ignored
+  var promptLocked = false;        // exclusive prompt (Dismount/Exit/Stand up) shown
+  var cameraTargetOverride = null; // Phase 4: updateCamera follows this when set
+  var ridingWheel = null, ridingBike = null, sitting = null;
+  var partnerHold = false, partnerSit = null; // Phase 4: partner AI paused / her bench
+  var nightLevel = 0;              // 0..1 darkness, written by updateDayNight
+  var WHEEL_R = 7, WHEEL_H = 12;   // wheel radius / hub height
+  var wheels = [], boats = [], bikes = [];
+
+  /* ---- geometry helpers: bake transformed, vertex-colored parts, merge to 1 mesh ---- */
+  function eulerMatrix(rx, ry, rz) { // R = Ry * Rx * Rz
+    var cx = Math.cos(rx), sx = Math.sin(rx),
+        cy = Math.cos(ry), sy = Math.sin(ry),
+        cz = Math.cos(rz), sz = Math.sin(rz);
+    return [
+      cy * cz + sy * sx * sz, -cy * sz + sy * sx * cz, sy * cx,
+      cx * sz, cx * cz, -sx,
+      -sy * cz + cy * sx * sz, sy * sz + cy * sx * cz, cy * cx
+    ];
+  }
+  function xg(g, px, py, pz, rx, ry, rz, color, parts) { // transformed part
+    var p = g.attributes.position;
+    if (p && p.array) {
+      var R = eulerMatrix(rx || 0, ry || 0, rz || 0);
+      var n = g.attributes.normal, arr = p.array, narr = n && n.array;
+      for (var i = 0; i < arr.length; i += 3) {
+        var x = arr[i], y = arr[i + 1], z = arr[i + 2];
+        arr[i] = R[0] * x + R[1] * y + R[2] * z + px;
+        arr[i + 1] = R[3] * x + R[4] * y + R[5] * z + py;
+        arr[i + 2] = R[6] * x + R[7] * y + R[8] * z + pz;
+        if (narr) {
+          var nx = narr[i], ny = narr[i + 1], nz = narr[i + 2];
+          narr[i] = R[0] * nx + R[1] * ny + R[2] * nz;
+          narr[i + 1] = R[3] * nx + R[4] * ny + R[5] * nz;
+          narr[i + 2] = R[6] * nx + R[7] * ny + R[8] * nz;
+        }
+      }
+    }
+    parts.push({ g: g, c: color });
+  }
+  function tubePart(ax, ay, az, bx, by, bz, w, color, parts) { // box tube between points
+    var dx = bx - ax, dy = by - ay, dz = bz - az;
+    var len = Math.sqrt(dx * dx + dy * dy + dz * dz) || 0.001;
+    var g = new THREE.BoxGeometry(w, len, w);
+    xg(g, (ax + bx) / 2, (ay + by) / 2, (az + bz) / 2,
+      Math.acos(Math.max(-1, Math.min(1, dy / len))), Math.atan2(dx, dz), 0, color, parts);
+  }
+  function mergeParts(parts) { // indexed merge + color attribute (one draw call)
+    var p0 = parts[0].g;
+    if (!p0.attributes.position || !p0.attributes.position.array) return p0; // headless stub
+    var pos = [], nor = [], uv = [], col = [], idx = [], off = 0;
+    for (var i = 0; i < parts.length; i++) {
+      var g = parts[i].g, c = parts[i].c;
+      var p = g.attributes.position, n = g.attributes.normal, u = g.attributes.uv, ix = g.index;
+      var cr = ((c >> 16) & 255) / 255, cg = ((c >> 8) & 255) / 255, cb = (c & 255) / 255;
+      var nv = p.array.length / 3;
+      for (var v = 0; v < nv; v++) {
+        pos.push(p.array[v * 3], p.array[v * 3 + 1], p.array[v * 3 + 2]);
+        if (n && n.array) nor.push(n.array[v * 3], n.array[v * 3 + 1], n.array[v * 3 + 2]);
+        else nor.push(0, 1, 0);
+        if (u && u.array) uv.push(u.array[v * 2], u.array[v * 2 + 1]); else uv.push(0, 0);
+        col.push(cr, cg, cb);
+      }
+      if (ix && ix.array) for (var k = 0; k < ix.array.length; k++) idx.push(ix.array[k] + off);
+      else for (var k2 = 0; k2 < nv; k2++) idx.push(k2 + off);
+      off += nv;
+    }
+    var geo = new THREE.BufferGeometry();
+    geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pos), 3));
+    geo.setAttribute('normal', new THREE.BufferAttribute(new Float32Array(nor), 3));
+    geo.setAttribute('uv', new THREE.BufferAttribute(new Float32Array(uv), 2));
+    geo.setAttribute('color', new THREE.BufferAttribute(new Float32Array(col), 3));
+    geo.setIndex(idx);
+    return geo;
+  }
+  function shadeColor(hex, f) {
+    var r = Math.min(255, ((hex >> 16) & 255) * f) | 0,
+        g = Math.min(255, ((hex >> 8) & 255) * f) | 0,
+        b = Math.min(255, (hex & 255) * f) | 0;
+    return (r << 16) | (g << 8) | b;
+  }
+  function boundsOf(geo) { // local-space bounds of merged geometry (debug/test)
+    var a = geo.attributes.position.array, mn = [1e9, 1e9, 1e9], mx = [-1e9, -1e9, -1e9];
+    for (var i = 0; i < a.length; i += 3) {
+      for (var k = 0; k < 3; k++) {
+        if (a[i + k] < mn[k]) mn[k] = a[i + k];
+        if (a[i + k] > mx[k]) mx[k] = a[i + k];
+      }
+    }
+    return { minX: mn[0], maxX: mx[0], minY: mn[1], maxY: mx[1], minZ: mn[2], maxZ: mx[2] };
+  }
+  var vcMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
+
+  /* ---- shared sitting pose (campfire benches, wheel gondolas) ---- */
+  function applySitPose(c, dt, rigY) {
+    var k = 1 - Math.exp(-dt * 8);
+    c.hipL.rotation.x = lerp(c.hipL.rotation.x, -1.25, k);
+    c.hipR.rotation.x = lerp(c.hipR.rotation.x, -1.25, k);
+    c.shL.rotation.x = lerp(c.shL.rotation.x, -0.5, k);
+    c.shR.rotation.x = lerp(c.shR.rotation.x, -0.5, k);
+    c.shL.rotation.z = lerp(c.shL.rotation.z, -0.10, k);
+    c.shR.rotation.z = lerp(c.shR.rotation.z, 0.10, k);
+    c.rig.position.y = lerp(c.rig.position.y, rigY, k);
+    c.lean = lerp(c.lean, -0.04, k);
+    c.rig.rotation.x = c.lean;
+    c.headG.rotation.y = lerp(c.headG.rotation.y, 0, k);
+  }
+
+  /* ---------------- 1. rideable sky wheel ---------------- */
+  function boardWheel(w) {
+    if (w.riding) return;
+    var best = 0, bd = 1e9; // gondola nearest the boarding point (world xz; yaw=PI)
+    for (var i = 0; i < 8; i++) {
+      var a = w.angle + i * Math.PI / 4;
+      var gx = w.cx - Math.cos(a) * WHEEL_R, gz = w.cz;
+      var d = Math.hypot(gx - w.boardX, gz - w.boardZ);
+      if (d < bd) { bd = d; best = i; }
+    }
+    w.riding = true; w.rideIdx = best; ridingWheel = w;
+    w.rideIt.disabled = true;
+    movementLocked = true; promptLocked = true;
+    cameraTargetOverride = player.position; // follow-camera retarget (no camera rewrite)
+    showPrompt('🎡 Exit', function () { exitWheel(w); });
+  }
+  function exitWheel(w) {
+    w.riding = false; ridingWheel = null;
+    w.rideIt.disabled = false;
+    movementLocked = false; promptLocked = false;
+    cameraTargetOverride = null;
+    hidePrompt();
+    player.position.set(w.boardX, walkHeight(w.boardX, w.boardZ), w.boardZ);
+    playerYaw = targetYaw = w.exitYaw; player.rotation.y = w.exitYaw;
+  }
+  function buildSkyWheel(plot, seedAngle) {
+    var wx = plot.x, wz = plot.z, gy = groundHeight(wx, wz);
+    var grp = new THREE.Group();
+    grp.position.set(wx, gy, wz); grp.rotation.y = Math.PI; // face the plaza
+    var H = WHEEL_H, R = WHEEL_R;
+    /* static: platform, A-frames, crossbar, ticket booth (one merged mesh) */
+    var sp = [];
+    xg(new THREE.CylinderGeometry(4.8, 5.2, 0.5, 18), 0, 0.25, 0, 0, 0, 0, 0x8a7f72, sp);
+    [-1.9, 1.9].forEach(function (sz) {
+      tubePart(-3.6, 0.4, sz, 0, H, sz, 0.55, 0xb03a48, sp);
+      tubePart(3.6, 0.4, sz, 0, H, sz, 0.55, 0xb03a48, sp);
+    });
+    tubePart(0, H, -1.9, 0, H, 1.9, 0.42, 0x7a2a34, sp);
+    xg(new THREE.BoxGeometry(2.2, 2.0, 1.8), 0, 1.0, 6.4, 0, 0, 0, 0xf2e3c2, sp);   // booth
+    xg(new THREE.ConeGeometry(1.9, 1.0, 4), 0, 2.5, 6.4, 0, Math.PI / 4, 0, 0xc0392b, sp); // roof
+    xg(new THREE.BoxGeometry(2.4, 0.14, 0.6), 0, 1.05, 7.4, 0, 0, 0, 0x8a5a30, sp); // counter
+    var stat = new THREE.Mesh(mergeParts(sp), vcMat);
+    stat.castShadow = true; stat.receiveShadow = true; grp.add(stat);
+    var statGeo = stat.geometry;
+    /* rotor: rim + spokes + hub + 8 upright gondolas */
+    var rotor = new THREE.Group(); rotor.position.set(0, H, 0); grp.add(rotor);
+    var rimMat = new THREE.MeshStandardMaterial({
+      color: 0xd94f5c, roughness: 0.5, emissive: 0xff6a4a, emissiveIntensity: 0.25
+    });
+    var rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.28, 10, 44), rimMat);
+    rim.castShadow = true; rotor.add(rim); windowMats.push(rimMat); // night glow
+    var skp = [];
+    for (var i = 0; i < 8; i++) {
+      var a = i * Math.PI / 4;
+      tubePart(0, 0, 0, Math.cos(a) * (R - 0.2), Math.sin(a) * (R - 0.2), 0, 0.16, 0xf5ead2, skp);
+    }
+    var spokeGeo = mergeParts(skp);
+    rotor.add(new THREE.Mesh(spokeGeo, vcMat));
+    var hkp = [];
+    xg(new THREE.CylinderGeometry(0.75, 0.75, 1.7, 12), 0, 0, 0, Math.PI / 2, 0, 0, 0xd8a04a, hkp);
+    xg(new THREE.SphereGeometry(0.5, 10, 8), 0, 0, 0, 0, 0, 0, 0xffe0a0, hkp);
+    var hubMat = new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.4, emissive: 0xffc46b, emissiveIntensity: 0.4
+    });
+    rotor.add(new THREE.Mesh(mergeParts(hkp), hubMat)); windowMats.push(hubMat);
+    /* gondolas: one InstancedMesh; children of the rotor so they orbit yet stay upright */
+    var gparts = [];
+    tubePart(0, 0, 0, 0, -1.0, 0, 0.12, 0x3a3a44, gparts);                 // hanger
+    xg(new THREE.BoxGeometry(2.6, 2.6, 2.8), 0, -2.3, 0, 0, 0, 0, 0xffffff, gparts); // cabin
+    xg(new THREE.BoxGeometry(2.9, 0.2, 3.1), 0, -0.9, 0, 0, 0, 0, 0xffffff, gparts);  // roof
+    var gondMat = new THREE.MeshStandardMaterial({
+      vertexColors: true, roughness: 0.6, emissive: 0xffb46b, emissiveIntensity: 0.18
+    });
+    windowMats.push(gondMat); // cabins glow warm at night
+    var gondGeo = mergeParts(gparts);
+    var gond = new THREE.InstancedMesh(gondGeo, gondMat, 8);
+    var cols = [0xff5a5a, 0xffb03a, 0xffe45a, 0x5ad96b, 0x5ab8ff, 0xb07aff, 0xff7ac0, 0x5ae8d4];
+    for (var j = 0; j < 8; j++) {
+      var a2 = j * Math.PI / 4;
+      _dummy.position.set(Math.cos(a2) * R, Math.sin(a2) * R, 0);
+      _dummy.rotation.set(0, 0, 0); _dummy.scale.set(1, 1, 1);
+      _dummy.updateMatrix(); gond.setMatrixAt(j, _dummy.matrix);
+      gond.setColorAt(j, dummyColor.setHex(cols[j]));
+    }
+    if (gond.instanceMatrix) gond.instanceMatrix.needsUpdate = true;
+    gond.castShadow = true; rotor.add(gond);
+    var hubLight = new THREE.PointLight(0xffc46b, 0, 30, 1.8);
+    hubLight.position.set(0, H, 0); grp.add(hubLight);
+    scene.add(grp);
+    registerChunk(grp, wx, wz);
+    colliders.push({ x: wx, z: wz, r: 8.5 }); // solid structure; prompt stays reachable
+    var boardX = wx, boardZ = wz - 8.8;       // booth front (yaw=PI flips local +z)
+    var w = {
+      cx: wx, cz: wz, baseY: gy, rotor: rotor, angle: seedAngle, spin: 0.045,
+      riding: false, rideIdx: 0, hubLight: hubLight,
+      boardX: boardX, boardZ: boardZ, exitYaw: Math.PI
+    };
+    var it = {
+      x: boardX, z: boardZ, r: 4.2, label: '🎡 Ride', disabled: false,
+      action: function () { boardWheel(w); }
+    };
+    w.rideIt = it;
+    interactables.push(it);
+    wheels.push(w);
+    w.geoVerts = { // test/debug: merged-geometry stats (local space)
+      statik: statGeo.attributes.position.count,
+      spokes: spokeGeo.attributes.position.count,
+      gondola: gondGeo.attributes.position.count,
+      staticBounds: boundsOf(statGeo)
+    };
+    return w;
+  }
+
+  /* ---------------- 2. dock + rowboat ---------------- */
+  var pierLantMat = new THREE.MeshStandardMaterial({
+    color: 0xffd9a0, emissive: 0xffb46b, emissiveIntensity: 0.7, roughness: 0.5
+  });
+  windowMats.push(pierLantMat);
+  function buildDock(dock, seed) {
+    var sx = dock.x, sz = dock.z, dx = dock.dx, dz = dock.dz;
+    var deckY = 1.3;
+    var ex = sx + dx * PIER_LEN, ez = sz + dz * PIER_LEN;
+    var grp = new THREE.Group();
+    grp.position.set(sx, 0, sz); grp.rotation.y = Math.atan2(dx, dz); // pier along local +z
+    var prand = mulberry32(seed);
+    var pp = [], n = 13;
+    for (var i = 0; i < n; i++) { // planks with subtle tone variation
+      xg(new THREE.BoxGeometry(3.2, 0.16, 0.92), 0, deckY, 0.55 + i * 1.05, 0, 0, 0,
+        shadeColor(0x8a6238, 0.9 + prand() * 0.2), pp);
+    }
+    var planks = new THREE.Mesh(mergeParts(pp), vcMat);
+    planks.castShadow = true; planks.receiveShadow = true; grp.add(planks);
+    var qp = []; // posts + rope rails
+    for (var j = 0; j < n; j += 3) {
+      var pz = 0.55 + j * 1.05;
+      [-1.45, 1.45].forEach(function (px) {
+        xg(new THREE.CylinderGeometry(0.15, 0.18, deckY + 2.0, 7), px, deckY / 2, pz, 0, 0, 0, 0x6b4a2c, qp);
+      });
+      if (j + 3 < n) {
+        var pz2 = 0.55 + (j + 3) * 1.05;
+        [-1.45, 1.45].forEach(function (px2) { // rope with a gentle sag (2 spans)
+          var mz = (pz + pz2) / 2;
+          tubePart(px2, deckY + 0.85, pz, px2, deckY + 0.72, mz, 0.06, 0xc9a86a, qp);
+          tubePart(px2, deckY + 0.72, mz, px2, deckY + 0.85, pz2, 0.06, 0xc9a86a, qp);
+        });
+      }
+    }
+    xg(new THREE.CylinderGeometry(0.09, 0.11, 1.7, 6), 1.25, deckY + 0.85, PIER_LEN - 0.6, 0, 0, 0, 0x4a3524, qp); // lamp pole
+    grp.add(new THREE.Mesh(mergeParts(qp), vcMat));
+    var lant = new THREE.Mesh(new THREE.BoxGeometry(0.5, 0.6, 0.5), pierLantMat);
+    lant.position.set(1.25, deckY + 1.85, PIER_LEN - 0.6); grp.add(lant);
+    var spr = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: glowTex, color: 0xffb46b, transparent: true, opacity: 0.1,
+      blending: THREE.AdditiveBlending, depthWrite: false
+    }));
+    spr.scale.set(4, 4, 1); spr.position.copy(lant.position);
+    grp.add(spr); lanternSprites.push(spr);
+    /* rowboat floating beside the pier end */
+    var bp = [];
+    xg(new THREE.BoxGeometry(1.7, 0.28, 4.4), 0, 0.15, 0, 0, 0, 0, 0x7a4f2e, bp);          // hull bottom
+    xg(new THREE.BoxGeometry(0.2, 0.75, 4.4), -0.85, 0.55, 0, 0, 0, 0.18, 0x7a4f2e, bp);  // port wall
+    xg(new THREE.BoxGeometry(0.2, 0.75, 4.4), 0.85, 0.55, 0, 0, 0, -0.18, 0x7a4f2e, bp);  // starboard
+    xg(new THREE.BoxGeometry(1.7, 0.75, 0.2), 0, 0.55, -2.15, 0, 0, 0, 0x7a4f2e, bp);    // transom
+    xg(new THREE.BoxGeometry(1.7, 0.75, 1.4), 0, 0.55, 2.5, -0.5, 0, 0, 0x7a4f2e, bp);    // bow
+    xg(new THREE.BoxGeometry(1.5, 0.12, 0.45), 0, 0.62, -0.9, 0, 0, 0, 0x9a6f42, bp);     // benches
+    xg(new THREE.BoxGeometry(1.5, 0.12, 0.45), 0, 0.62, 0.9, 0, 0, 0, 0x9a6f42, bp);
+    var boat = new THREE.Group();
+    var hull = new THREE.Mesh(mergeParts(bp), vcMat); hull.castShadow = true; boat.add(hull);
+    boat.position.set(ex + 3.4, 0.12, ez + dz * 2.5); boat.rotation.y = Math.atan2(dx, dz);
+    scene.add(boat);
+    boats.push({ group: boat, ph: seed * 0.37 });
+    scene.add(grp);
+    registerChunk(grp, (sx + ex) / 2, (sz + ez) / 2);
+    pierRects.push({ // strollable deck
+      x0: Math.min(sx, ex) - 1.7, x1: Math.max(sx, ex) + 1.7,
+      z0: Math.min(sz, ez) - 0.5, z1: Math.max(sz, ez) + 0.5, y: deckY + 0.08
+    });
+  }
+
+  /* ---------------- 3. bicycles ---------------- */
+  var bikeTireMat = new THREE.MeshStandardMaterial({ color: 0x2a2a2e, roughness: 0.8 });
+  var bikeWheelGeo = (function () { // torus + spokes + hub, axle along x (rolls on z)
+    var wp = [];
+    xg(new THREE.TorusGeometry(0.55, 0.09, 8, 20), 0, 0, 0, 0, Math.PI / 2, 0, 0x2a2a2e, wp);
+    for (var s = 0; s < 3; s++)
+      xg(new THREE.BoxGeometry(0.05, 1.0, 0.05), 0, 0, 0, s * Math.PI / 3, Math.PI / 2, 0, 0x8a8a92, wp);
+    xg(new THREE.CylinderGeometry(0.07, 0.07, 0.16, 8), 0, 0, 0, 0, 0, Math.PI / 2, 0x55555e, wp);
+    return mergeParts(wp);
+  })();
+  function buildBike(frameColor, px, pz, yaw) {
+    var gy = groundHeight(px, pz);
+    var grp = new THREE.Group(); grp.position.set(px, gy, pz); grp.rotation.y = yaw;
+    var fp = [], F = frameColor, D = 0x333338;
+    tubePart(0.10, 0.55, -0.85, 0.10, 0.60, -0.05, 0.09, F, fp);   // chainstays
+    tubePart(-0.10, 0.55, -0.85, -0.10, 0.60, -0.05, 0.09, F, fp);
+    tubePart(0.10, 0.55, -0.85, 0.10, 1.08, -0.36, 0.08, F, fp);  // seatstays
+    tubePart(-0.10, 0.55, -0.85, -0.10, 1.08, -0.36, 0.08, F, fp);
+    tubePart(0, 0.60, -0.05, 0, 1.12, -0.38, 0.10, F, fp);        // seat tube
+    tubePart(0, 0.60, -0.05, 0, 0.95, 0.70, 0.11, F, fp);         // down tube
+    tubePart(0, 1.12, -0.38, 0, 1.28, 0.60, 0.10, F, fp);         // top tube
+    tubePart(0.10, 0.95, 0.70, 0.10, 0.55, 0.85, 0.08, F, fp);    // fork
+    tubePart(-0.10, 0.95, 0.70, -0.10, 0.55, 0.85, 0.08, F, fp);
+    tubePart(0, 0.95, 0.70, 0, 1.28, 0.60, 0.14, F, fp);          // head tube
+    tubePart(0, 1.28, 0.60, 0, 1.42, 0.52, 0.07, D, fp);          // stem
+    tubePart(-0.32, 1.42, 0.52, 0.32, 1.42, 0.52, 0.06, D, fp);   // handlebar
+    xg(new THREE.BoxGeometry(0.28, 0.10, 0.42), 0, 1.16, -0.40, 0, 0, 0, D, fp); // saddle
+    var frameGeo = mergeParts(fp);
+    var frame = new THREE.Mesh(frameGeo, vcMat); frame.castShadow = true; grp.add(frame);
+    var wheelF = new THREE.Mesh(bikeWheelGeo, bikeTireMat);
+    wheelF.position.set(0, 0.55, 0.85); wheelF.castShadow = true; grp.add(wheelF);
+    var wheelR = new THREE.Mesh(bikeWheelGeo, bikeTireMat);
+    wheelR.position.set(0, 0.55, -0.85); wheelR.castShadow = true; grp.add(wheelR);
+    scene.add(grp);
+    registerChunk(grp, px, pz);
+    var b = { group: grp, wheelF: wheelF, wheelR: wheelR, pedal: 0, it: null };
+    var it = {
+      x: px, z: pz, r: 3.4, label: '🚲 Ride', disabled: false,
+      action: function () { rideBike(b); }
+    };
+    b.it = it; interactables.push(it);
+    bikes.push(b);
+    b.geoVerts = frameGeo.attributes.position.count; // 13 boxes = 312 verts
+    b.frameBounds = boundsOf(frameGeo);
+    return b;
+  }
+  function buildCycleStand(plot, seedIdx) {
+    var sx = plot.x, sz = plot.z, gy = groundHeight(sx, sz);
+    var grp = new THREE.Group(); grp.position.set(sx, gy, sz);
+    var rp = [];
+    tubePart(-1.6, 0, 0, -1.6, 0.9, 0, 0.09, 0x5a6068, rp);
+    tubePart(1.6, 0, 0, 1.6, 0.9, 0, 0.09, 0x5a6068, rp);
+    tubePart(-1.6, 0.9, 0, 1.6, 0.9, 0, 0.09, 0x5a6068, rp);
+    var rack = new THREE.Mesh(mergeParts(rp), vcMat); rack.castShadow = true; grp.add(rack);
+    scene.add(grp);
+    registerChunk(grp, sx, sz);
+    var cols = [0x2a9d8f, 0xe86a8a]; // teal + rose, like the old game
+    for (var i = 0; i < 2; i++)
+      buildBike(cols[(seedIdx + i) % 2], sx + (i ? 1.5 : -1.5), sz + 0.9, Math.PI / 2 + (i ? 0.25 : -0.2));
+  }
+  function rideBike(b) {
+    if (ridingBike) return;
+    ridingBike = b; b.it.disabled = true;
+    speedMult = 1.8;
+    scene.remove(b.group);
+    playerRig.group.add(b.group);      // bike follows the player
+    b.group.position.set(0, 0.02, -0.30); // saddle under the hips
+    b.group.rotation.set(0, 0, 0);
+    b.pedal = 0;
+    promptLocked = true;
+    showPrompt('🚲 Dismount', dismountBike);
+  }
+  function dismountBike() {
+    var b = ridingBike; if (!b) return;
+    ridingBike = null; speedMult = 1;
+    var yaw = playerYaw;
+    var wx = player.position.x - 0.30 * Math.sin(yaw), wz = player.position.z - 0.30 * Math.cos(yaw);
+    var wy = walkHeight(wx, wz);
+    if (wy < -900) { wx = player.position.x; wz = player.position.z; wy = player.position.y; }
+    playerRig.group.remove(b.group);
+    scene.add(b.group);
+    b.group.position.set(wx, wy, wz);
+    b.group.rotation.set(0, yaw, 0);
+    b.it.disabled = false; b.it.x = wx; b.it.z = wz; // prompt follows the parked bike
+    promptLocked = false;
+    hidePrompt();
+  }
+  function updateBikeAnim(c, dt, t, moving, speed) {
+    var k = 1 - Math.exp(-dt * 8), b = ridingBike;
+    if (b) {
+      b.pedal += dt * (moving ? speed * 1.6 : 1.2);
+      var s = Math.sin(b.pedal); // legs pedal in circles
+      c.hipL.rotation.x = lerp(c.hipL.rotation.x, -0.95 + s * 0.45, k);
+      c.hipR.rotation.x = lerp(c.hipR.rotation.x, -0.95 - s * 0.45, k);
+      var spin = speed * dt / 0.55 * (moving ? 1 : 0.15); // forward roll: top of wheel moves +z
+      b.wheelF.rotation.x += spin; b.wheelR.rotation.x += spin;
+    }
+    c.shL.rotation.x = lerp(c.shL.rotation.x, -0.72, k); // hands to the handlebar
+    c.shR.rotation.x = lerp(c.shR.rotation.x, -0.72, k);
+    c.rig.position.y = lerp(c.rig.position.y, -0.15, k); // butt on the saddle
+    c.lean = lerp(c.lean, 0.14, k); c.rig.rotation.x = c.lean;
+    c.headG.rotation.y = Math.sin(t * 0.6) * 0.07;
+  }
+
+  /* ---------------- 4. campfire sit ---------------- */
+  var campBenches = [-1, 1].map(function (s) {
+    var bx = campfirePos.x + s * 4.6, bz = campfirePos.z + 1.2;
+    return { x: bx, z: bz, yaw: Math.atan2(campfirePos.x - bx, campfirePos.z - bz) };
+  });
+  function doCampSit() {
+    if (sitting) return;
+    var d0 = Math.hypot(player.position.x - campBenches[0].x, player.position.z - campBenches[0].z);
+    var mine = d0 < Math.hypot(player.position.x - campBenches[1].x, player.position.z - campBenches[1].z)
+      ? campBenches[0] : campBenches[1];
+    var hers = mine === campBenches[0] ? campBenches[1] : campBenches[0];
+    sitting = { bench: mine };
+    player.position.set(mine.x, walkHeight(mine.x, mine.z), mine.z);
+    playerYaw = targetYaw = mine.yaw; player.rotation.y = mine.yaw;
+    movementLocked = true; promptLocked = true;
+    showPrompt('🧍 Stand up', doCampStand);
+    if (partnerOnline && // Tara joins on the next bench when she's close
+        Math.hypot(partner.position.x - campfirePos.x, partner.position.z - campfirePos.z) < 14) {
+      partnerHold = true;
+      partnerSit = { x: hers.x, z: hers.z, yaw: hers.yaw, seated: false };
+    }
+  }
+  function doCampStand() {
+    if (!sitting) return;
+    sitting = null; partnerHold = false; partnerSit = null;
+    movementLocked = false; promptLocked = false;
+    hidePrompt();
+  }
+  interactables.push({
+    x: campfirePos.x, z: campfirePos.z + 1.0, r: 5,
+    label: '🔥 Sit', disabled: false, action: doCampSit
+  });
+
+  /* ---------------- Phase 4 per-frame update ---------------- */
+  function updatePhase4(dt, t) {
+    for (var i = 0; i < wheels.length; i++) {
+      var w = wheels[i];
+      w.spin = lerp(w.spin, w.riding ? 0.12 : 0.045, 1 - Math.exp(-dt * 1.5));
+      w.angle += w.spin * dt;
+      w.rotor.rotation.z = w.angle;
+      w.hubLight.intensity = nightLevel * 16;
+      if (w.riding) { // carry the rider in their gondola (yaw=PI: x flips)
+        var a = w.angle + w.rideIdx * Math.PI / 4;
+        var lx = Math.cos(a) * WHEEL_R, ly = Math.sin(a) * WHEEL_R;
+        var wy = w.baseY + WHEEL_H + ly;
+        player.position.set(w.cx - lx, wy - 3.6, w.cz);
+        var hyaw = Math.atan2(-lx, 0.001); // face outward
+        playerYaw = targetYaw = hyaw; player.rotation.y = hyaw;
+        applySitPose(playerRig, dt, -0.55);
+      }
+    }
+    for (var b = 0; b < boats.length; b++) { // gentle bobbing
+      var bt = boats[b];
+      bt.group.position.y = 0.12 + Math.sin(t * 0.9 + bt.ph) * 0.12;
+      bt.group.rotation.z = Math.sin(t * 0.8 + bt.ph) * 0.045;
+      bt.group.rotation.x = Math.sin(t * 0.63 + bt.ph * 1.7) * 0.03;
+    }
+    if (sitting) fireLight.intensity += Math.sin(t * 6.3) * 2.5; // warmth pulse
+  }
+
+  /* build all Phase 4 objects (mirrored across islands) */
+  pierRects.length = 0; // reset on re-init (module-level walk list)
+  buildSkyWheel(WHEEL_A, 0.6);
+  buildSkyWheel(WHEEL_B, 2.2);
+  buildDock(DOCK_A, 31);
+  buildDock(DOCK_B, 77);
+  buildCycleStand(STAND_A, 0);
+  buildCycleStand(STAND_B, 1);
+
   /* ---------------- input: keys + touch joystick + mouse orbit ---------- */
   var keys = {};
+  var promptAction = null; // Phase 2: current prompt button action (E key)
   var joyVec = { x: 0, y: 0, active: false };
   var orbit = { yaw: Math.PI * 0.15, pitch: 0.42, dist: 26, dragging: false, lx: 0, ly: 0 };
   var joystickEls = null;
 
-  function onKeyDown(e) { keys[e.code] = true; }
+  function onKeyDown(e) {
+    keys[e.code] = true;
+    if (e.code === 'KeyE' && !e.repeat && promptAction) promptAction(); // Phase 2 prompt
+  }
   function onKeyUp(e) { keys[e.code] = false; }
 
   function buildJoystick() {
@@ -828,6 +2660,7 @@ function init(canvasId) {
     /* sun position arcs across the sky; moon takes over at night */
     var ang = ((hour - 6) / 12) * Math.PI; // 6h=east .. 18h=west
     var night = s.darkness;
+    nightLevel = night; // Phase 4: wheel hub lights, driven below
     var sunA = (1 - night) * ang;
     var sd = new THREE.Vector3(Math.cos(sunA), Math.max(Math.sin(sunA), 0.06), 0.35).normalize();
     if (night > 0.5) { // moonlight from opposite arc
@@ -845,6 +2678,7 @@ function init(canvasId) {
     /* lanterns / fire / fireflies come alive at night */
     var glow = 0.12 + night * 0.88;
     for (var i = 0; i < lanternMats.length; i++) lanternMats[i].emissiveIntensity = 0.25 + night * 2.2;
+    for (var w = 0; w < windowMats.length; w++) windowMats[w].emissiveIntensity = 0.25 + night * 2.2; // Phase 2: glowing windows
     for (var j = 0; j < lanternSprites.length; j++) lanternSprites[j].material.opacity = 0.06 + night * 0.6;
     for (var f = 0; f < fireMats.length; f++) {
       fireMats[f].emissiveIntensity = (1.1 + night * 1.6) * (0.85 + 0.3 * Math.sin(t * 9 + f * 2.1));
@@ -879,7 +2713,20 @@ function init(canvasId) {
   }
 
   /* ---------------- movement + camera ---------------- */
-  var vel = new THREE.Vector3();
+  /* Phase 2: circle colliders push the player out (slide, don't stick);
+     inside an interior room the player is clamped to the room bounds. */
+  function collideCircle(px, pz) {
+    for (var i = 0; i < colliders.length; i++) {
+      var c = colliders[i];
+      var dx = px - c.x, dz = pz - c.z;
+      var rr = c.r + 0.7, d2 = dx * dx + dz * dz;
+      if (d2 < rr * rr) {
+        if (d2 < 1e-6) { px = c.x + rr; }
+        else { var dd = Math.sqrt(d2); px = c.x + dx / dd * rr; pz = c.z + dz / dd * rr; }
+      }
+    }
+    return { x: px, z: pz };
+  }
   function inputVector() {
     var ix = 0, iz = 0;
     if (keys.KeyW || keys.ArrowUp) iz -= 1;
@@ -891,46 +2738,73 @@ function init(canvasId) {
     if (m > 1) { ix /= m; iz /= m; }
     return { x: ix, z: iz };
   }
-  function updatePlayer(dt) {
+  /* Phase 3: shared axis-separated stepper (player + partner): circle
+     colliders push out (slide, don't stick), interior rooms clamp,
+     water/out-of-bounds block */
+  function stepMover(px, pz, dx, dz, speed, dt) {
+    var nx = px + dx * speed * dt, nz = pz + dz * speed * dt;
+    var moved = false, x = px, z = pz;
+    var zone = zoneAt(px, pz);
+    if (zone) {
+      var qx = clamp(nx, zone.x0 + 0.6, zone.x1 - 0.6);
+      var qz = clamp(nz, zone.z0 + 0.6, zone.z1 - 0.6);
+      if (walkHeight(qx, pz) > -900) { x = qx; moved = true; }
+      if (walkHeight(x, qz) > -900) { z = qz; moved = true; }
+    } else {
+      /* Phase 2: resolve circle colliders on the COMBINED move (one radial
+         push-out per collider = stable slide, no tangential orbit), then
+         axis-separated walkHeight checks keep water/out-of-bounds blocking */
+      var tx = nx, tz = nz;
+      for (var ci = 0; ci < 2; ci++) { var rs = collideCircle(tx, tz); tx = rs.x; tz = rs.z; }
+      if (walkHeight(tx, pz) > -900) { x = tx; moved = true; }
+      if (walkHeight(x, tz) > -900) { z = tz; moved = true; }
+    }
+    return { x: x, z: z, moved: moved };
+  }
+  function updatePlayer(dt, t) {
     var inp = inputVector();
     /* camera-relative movement */
     var sin = Math.sin(orbit.yaw), cos = Math.cos(orbit.yaw);
     var dx = inp.x * cos + inp.z * sin;
     var dz = -inp.x * sin + inp.z * cos;
-    var speed = 11;
-    var nx = player.position.x + dx * speed * dt;
-    var nz = player.position.z + dz * speed * dt;
-    /* axis-separated slide collision */
+    var speed = 11 * speedMult; // Phase 4: bicycle multiplier
     var moved = false;
-    if (walkHeight(nx, player.position.z) > -900) { player.position.x = nx; moved = true; }
-    if (walkHeight(player.position.x, nz) > -900) { player.position.z = nz; moved = true; }
-    var gy = walkHeight(player.position.x, player.position.z);
-    if (gy > -900) player.position.y = lerp(player.position.y, gy, 1 - Math.exp(-dt * 10));
-    if (moved && (dx || dz)) {
-      targetYaw = Math.atan2(dx, dz);
-      var dy = targetYaw - playerYaw;
-      while (dy > Math.PI) dy -= Math.PI * 2;
-      while (dy < -Math.PI) dy += Math.PI * 2;
-      playerYaw += dy * (1 - Math.exp(-dt * 10));
-      player.rotation.y = playerYaw;
-      /* gentle bob while walking */
-      body.position.y = 1.15 + Math.abs(Math.sin(performance.now() * 0.012)) * 0.09;
-    } else {
-      body.position.y = 1.15;
+    if (!movementLocked) { // Phase 4: sitting / sky-wheel riding freezes walking
+      var st = stepMover(player.position.x, player.position.z, dx, dz, speed, dt);
+      player.position.x = st.x; player.position.z = st.z;
+      moved = st.moved && (dx || dz);
+      if (moved) {
+        targetYaw = Math.atan2(dx, dz);
+        var dy = targetYaw - playerYaw;
+        while (dy > Math.PI) dy -= Math.PI * 2;
+        while (dy < -Math.PI) dy += Math.PI * 2;
+        playerYaw += dy * (1 - Math.exp(-dt * 10));
+        player.rotation.y = playerYaw;
+      }
     }
+    var gy = walkHeight(player.position.x, player.position.z);
+    if (!ridingWheel && gy > -900) player.position.y = lerp(player.position.y, gy, 1 - Math.exp(-dt * 10)); // Phase 4: gondola drives y
+    if (ridingBike) updateBikeAnim(playerRig, dt, t, moved, speed); // Phase 4
+    else if (sitting) applySitPose(playerRig, dt, -0.55);            // Phase 4
+    else updateCharacterAnim(playerRig, dt, t, moved, speed); // Phase 3 rig
   }
   var _camTarget = new THREE.Vector3(), _camWant = new THREE.Vector3();
+  var camDistSm = 26; // smoothed camera distance (pulls in inside interiors)
   function updateCamera(dt) {
-    _camTarget.set(player.position.x, player.position.y + 2.2, player.position.z);
+    var tp = cameraTargetOverride || player.position; // Phase 4: follow gondola while riding
+    _camTarget.set(tp.x, tp.y + 2.2, tp.z);
+    var pzn = zoneAt(player.position.x, player.position.z); // Phase 2 interiors
+    var wantD = pzn ? Math.min(orbit.dist, 11) : orbit.dist;
+    camDistSm = lerp(camDistSm, wantD, 1 - Math.exp(-dt * 3));
     var cp = Math.cos(orbit.pitch), sp = Math.sin(orbit.pitch);
     var fx = -Math.sin(orbit.yaw) * cp, fz = -Math.cos(orbit.yaw) * cp;
     _camWant.set(
-      _camTarget.x - fx * orbit.dist,
-      _camTarget.y + sp * orbit.dist,
-      _camTarget.z - fz * orbit.dist
+      _camTarget.x - fx * camDistSm,
+      _camTarget.y + sp * camDistSm,
+      _camTarget.z - fz * camDistSm
     );
-    /* keep camera above terrain */
-    var minY = Math.max(groundHeight(_camWant.x, _camWant.z) + 2.2, 3.2);
+    /* keep camera above terrain (or room floor inside interiors) */
+    var minY = pzn ? (pzn.y + 1.2) : Math.max(groundHeight(_camWant.x, _camWant.z) + 2.2, 3.2);
     if (_camWant.y < minY) _camWant.y = minY;
     var k = 1 - Math.exp(-dt * 4.5);
     camera.position.lerp(_camWant, k);
@@ -973,10 +2847,13 @@ function init(canvasId) {
     var dt = Math.min(clock.getDelta(), 0.05);
     var t = clock.elapsedTime;
     waterUniforms.uTime.value = t;
-    updatePlayer(dt);
+    updatePlayer(dt, t);
+    updatePartner(dt, t); // Phase 3: Tara follow / porch idle
+    updatePhase4(dt, t); // Phase 4: sky wheels, boats, campfire warmth
     updateCamera(dt);
     updateDayNight(dt, t);
     updateAmbient(dt, t);
+    updatePhase2(dt, t); // Phase 2: smoke, prompts, interior cutaway, TV
     if ((frame++ % 3) === 0) updateLOD();
     renderer.render(scene, camera);
   }
@@ -1005,7 +2882,47 @@ function init(canvasId) {
   return {
     setTimeOfDay: function (h) { manualHour = (h === null || h === undefined) ? null : ((h % 24) + 24) % 24; },
     getPlayerPos: function () { return { x: player.position.x, y: player.position.y, z: player.position.z }; },
-    version: 'phase1-1.0',
+    showPrompt: showPrompt,   // Phase 2 prompt API (also on E key / tap)
+    hidePrompt: hidePrompt,
+    setPartnerOnline: setPartnerOnline, // Phase 3: Tara follow (true) / porch idle (false)
+    phase3: {                 // Phase 3 introspection / test hooks
+      partnerPos: function () { return { x: partner.position.x, y: partner.position.y, z: partner.position.z }; },
+      setPartner: function (x, z) { partner.position.set(x, partner.position.y, z); }, // Phase 4 test hook
+      playerRig: function () { return playerRig; },
+      partnerRig: function () { return partnerRig; },
+      isPartnerOnline: function () { return partnerOnline; },
+      porchB: function () { return { x: porchB.x, z: porchB.z }; }
+    },
+    phase2: {                 // Phase 2 introspection / test hooks
+      buildings: BUILDINGS,
+      interactables: interactables,
+      colliders: colliders,
+      interiorZones: interiorZones,
+      windowMats: windowMats,
+      promptEl: function () { return promptEl; },
+      promptLabel: function () { return promptShownLabel; },
+      getHour: function () { return manualHour; },
+      setPlayer: function (x, z) { player.position.set(x, player.position.y, z); },
+      setOrbitYaw: function (y) { orbit.yaw = y; }
+    },
+    phase4: {                 // Phase 4 introspection / test hooks
+      wheels: wheels,
+      bikes: bikes,
+      boats: boats,
+      docks: [DOCK_A, DOCK_B],
+      isRiding: function () { return !!(ridingWheel || ridingBike); },
+      isSitting: function () { return !!sitting; },
+      isPartnerSitting: function () { return !!(partnerSit && partnerSit.seated); },
+      speedMult: function () { return speedMult; },
+      camOverride: function () { return !!cameraTargetOverride; },
+      boardWheel: function (i) { boardWheel(wheels[i || 0]); },
+      exitWheel: function () { if (ridingWheel) exitWheel(ridingWheel); },
+      rideBike: function (i) { rideBike(bikes[i || 0]); },
+      dismount: function () { dismountBike(); },
+      sit: function () { doCampSit(); },
+      stand: function () { doCampStand(); }
+    },
+    version: 'phase4-1.0',
     destroy: function () {
       destroyed = true;
       cancelAnimationFrame(rafId);
@@ -1017,6 +2934,8 @@ function init(canvasId) {
       canvas.removeEventListener('wheel', onWheel);
       window.removeEventListener('resize', onResize);
       if (joystickEls && joystickEls.base.parentNode) joystickEls.base.parentNode.removeChild(joystickEls.base);
+      if (promptEl && promptEl.parentNode) promptEl.parentNode.removeChild(promptEl); // Phase 2
+      if (fadeEl && fadeEl.parentNode) fadeEl.parentNode.removeChild(fadeEl);         // Phase 2
       renderer.dispose();
     }
   };
