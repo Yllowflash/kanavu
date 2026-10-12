@@ -1778,6 +1778,57 @@ function init(canvasId) {
   var CHSPH = new THREE.SphereGeometry(0.5, 20, 16);    // hero surfaces
   var CHSPH_LO = new THREE.SphereGeometry(0.5, 12, 10); // small merged bits
   var CHCYL = new THREE.CylinderGeometry(0.5, 0.5, 1, 16);
+  /* ---- cozy fabric textures: canvas-generated knit / cable / fleece ----
+     Applied to sweater + boot materials so the characters match their
+     reference portraits (ribbed olive knit, salmon cable-knit, shearling). */
+  function _charCanvas(size, draw) {
+    var c = document.createElement('canvas'); c.width = c.height = size;
+    draw(c.getContext('2d'), size);
+    var t = new THREE.CanvasTexture(c);
+    t.wrapS = t.wrapT = THREE.RepeatWrapping;
+    if ('colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace;
+    t.anisotropy = 4;
+    return t;
+  }
+  function knitTex(base, dark) { // vertical ribbed knit (boy's olive sweater)
+    return _charCanvas(256, function (g, s) {
+      g.fillStyle = base; g.fillRect(0, 0, s, s);
+      var ribW = 14;
+      for (var x = 0; x < s; x += ribW) {
+        g.fillStyle = dark; g.fillRect(x, 0, ribW * 0.38, s);
+        g.fillStyle = 'rgba(255,255,255,0.10)'; g.fillRect(x + ribW * 0.55, 0, ribW * 0.18, s);
+      }
+      g.fillStyle = 'rgba(0,0,0,0.06)'; // faint horizontal rows
+      for (var y = 0; y < s; y += 10) g.fillRect(0, y, s, 1);
+    });
+  }
+  function cableTex(base, dark) { // girl's salmon cable-knit: twisted braid columns
+    return _charCanvas(256, function (g, s) {
+      g.fillStyle = base; g.fillRect(0, 0, s, s);
+      var col = s / 4;
+      for (var i = 0; i < 4; i++) {
+        var x0 = i * col;
+        for (var y = 0; y < s; y += 16) {
+          g.strokeStyle = dark; g.lineWidth = 5; g.lineCap = 'round';
+          g.beginPath(); g.moveTo(x0 + 8, y); g.lineTo(x0 + col - 8, y + 16); g.stroke();
+          g.beginPath(); g.moveTo(x0 + col - 8, y); g.lineTo(x0 + 8, y + 16); g.stroke();
+          g.strokeStyle = 'rgba(255,255,255,0.16)'; g.lineWidth = 2;
+          g.beginPath(); g.moveTo(x0 + 11, y + 3); g.lineTo(x0 + col - 11, y + 13); g.stroke();
+        }
+        g.fillStyle = 'rgba(0,0,0,0.10)'; g.fillRect(x0, 0, 3, s); // purl gutter
+      }
+    });
+  }
+  function fleeceTex(base) { // girl's shearling boots: fuzzy noise
+    return _charCanvas(128, function (g, s) {
+      g.fillStyle = base; g.fillRect(0, 0, s, s);
+      var r = mulberry32(77);
+      for (var i = 0; i < 2600; i++) {
+        g.fillStyle = r() < 0.5 ? 'rgba(255,255,255,0.28)' : 'rgba(188,172,148,0.28)';
+        g.fillRect(r() * s, r() * s, 1.7, 1.7);
+      }
+    });
+  }
   var CHMAT = {
     skin:   new THREE.MeshStandardMaterial({ color: 0xb07a4f, roughness: 0.62 }),
     hair:   new THREE.MeshStandardMaterial({ color: 0x25201b, roughness: 0.58 }),
@@ -1785,14 +1836,18 @@ function init(canvasId) {
     pupil:  new THREE.MeshStandardMaterial({ color: 0x26211d, roughness: 0.28 }),
     mouth:  new THREE.MeshStandardMaterial({ color: 0x7c4634, roughness: 0.60 }),
     brow:   new THREE.MeshStandardMaterial({ color: 0x25201b, roughness: 0.60 }),
-    boySw:  new THREE.MeshStandardMaterial({ color: 0x6d7f3c, roughness: 0.75 }), // olive sweater
+    hl:     new THREE.MeshBasicMaterial({ color: 0xffffff }), // eye catchlight
+    blush:  new THREE.MeshStandardMaterial({ color: 0xd98873, roughness: 0.70 }),
+    bead:   new THREE.MeshStandardMaterial({ color: 0xe79fb2, roughness: 0.45 }), // pink braid beads
+    hairG:  new THREE.MeshStandardMaterial({ color: 0x3a2a20, roughness: 0.55 }), // girl's warm dark brown
+    boySw:  new THREE.MeshStandardMaterial({ map: knitTex('#6d7f3c', '#57652f'), roughness: 0.92 }), // ribbed olive knit
     boyHem: new THREE.MeshStandardMaterial({ color: 0xf2ede2, roughness: 0.75 }), // white trim
     boyPn:  new THREE.MeshStandardMaterial({ color: 0x3b4048, roughness: 0.80 }), // charcoal pants
     boySh:  new THREE.MeshStandardMaterial({ color: 0x717177, roughness: 0.70 }), // gray shoes
-    grlSw:  new THREE.MeshStandardMaterial({ color: 0xe89a90, roughness: 0.78 }), // salmon sweater
-    grlCb:  new THREE.MeshStandardMaterial({ color: 0xd47f76, roughness: 0.78 }), // cable knit
+    grlSw:  new THREE.MeshStandardMaterial({ map: cableTex('#e89a90', '#c4746a'), roughness: 0.92 }), // salmon cable-knit
+    grlCb:  new THREE.MeshStandardMaterial({ color: 0xd47f76, roughness: 0.78 }), // cable trim
     grlPn:  new THREE.MeshStandardMaterial({ color: 0x2c3550, roughness: 0.80 }), // navy pants
-    grlBt:  new THREE.MeshStandardMaterial({ color: 0xf4eee1, roughness: 0.60 })  // cream boots
+    grlBt:  new THREE.MeshStandardMaterial({ map: fleeceTex('#f4eee1'), roughness: 0.95 })  // shearling boots
   };
   var CHGEO = {};
   function _torusY(r, tube, y) {
@@ -1812,6 +1867,12 @@ function init(canvasId) {
     CHGEO.pupil = mergeGeos([
       part(CHSPH_LO, 0.135, 0.005, 0.078, 0, 0, 0, 0.084, 0.084, 0.05),
       part(CHSPH_LO, -0.135, 0.005, 0.078, 0, 0, 0, 0.084, 0.084, 0.05)]);
+    CHGEO.hl = mergeGeos([ // white catchlights on the pupils (expressive eyes)
+      part(CHSPH_LO, 0.155, 0.035, 0.098, 0, 0, 0, 0.032, 0.032, 0.02),
+      part(CHSPH_LO, -0.115, 0.035, 0.098, 0, 0, 0, 0.032, 0.032, 0.02)]);
+    CHGEO.blush = mergeGeos([ // soft pink cheeks (portrait look)
+      part(CHSPH_LO, 0.205, -0.10, 0.235, 0, 0, 0, 0.085, 0.06, 0.05),
+      part(CHSPH_LO, -0.205, -0.10, 0.235, 0, 0, 0, 0.085, 0.06, 0.05)]);
     CHGEO.brows = mergeGeos([
       part(GEO.box, 0.145, 0.20, 0.27, 0, 0, -0.10, 0.15, 0.035, 0.04),
       part(GEO.box, -0.145, 0.20, 0.27, 0, 0, 0.10, 0.15, 0.035, 0.04)]);
@@ -1821,10 +1882,13 @@ function init(canvasId) {
     // arm: upper + forearm capsules with a gentle elbow bend (shoulder-pivot space)
     CHGEO.arm = mergeGeos([
       part(new THREE.CapsuleGeometry(0.125, 0.30, 4, 10), 0, -0.20, 0, 0, 0, 0, 1, 1, 1),
-      part(new THREE.CapsuleGeometry(0.105, 0.28, 4, 10), 0.015, -0.50, 0.035, 0.10, 0, -0.05, 1, 1, 1)]);
+      part(new THREE.CapsuleGeometry(0.105, 0.28, 4, 10), 0.015, -0.50, 0.035, 0.10, 0, -0.05, 1, 1, 1),
+      _torusY(0.10, 0.038, -0.63)]); // ribbed sweater cuff at the wrist
     CHGEO.hand = mergeGeos([part(CHSPH_LO, 0.03, -0.74, 0.06, 0, 0, 0, 0.23, 0.25, 0.23)]);
     CHGEO.thigh = mergeGeos([part(new THREE.CapsuleGeometry(0.15, 0.42, 4, 10), 0, -0.28, 0, 0, 0, 0, 1, 1, 1)]);
-    CHGEO.shin = mergeGeos([part(new THREE.CapsuleGeometry(0.125, 0.50, 4, 10), 0, -0.72, 0.005, 0, 0, 0, 1, 1, 1)]);
+    CHGEO.shin = mergeGeos([
+      part(new THREE.CapsuleGeometry(0.125, 0.50, 4, 10), 0, -0.72, 0.005, 0, 0, 0, 1, 1, 1),
+      _torusY(0.125, 0.045, -1.02)]); // elastic ankle cuff (joggers)
   })();
   /* ---- per-character geometries: torsos, trim, hair, footwear ---- */
   (function buildVariantCharGeos() {
@@ -1836,20 +1900,25 @@ function init(canvasId) {
     CHGEO.boyHem = mergeGeos([ // white hem band + neck trim (matches sheet)
       part(new THREE.CylinderGeometry(0.345, 0.335, 0.10, 16), 0, 1.32, 0, 0, 0, 0, 1, 1, 1),
       _torusY(0.15, 0.04, 2.045)]);
-    CHGEO.grlTorso = mergeGeos([ // salmon sweater, slightly slimmer
-      part(new THREE.CylinderGeometry(0.37, 0.30, 0.78, 16), 0, 1.65, 0, 0, 0, 0, 1, 1, 1),
-      part(CHSPH_LO, 0.34, 1.95, 0, 0, 0, 0, 0.36, 0.36, 0.36),
-      part(CHSPH_LO, -0.34, 1.95, 0, 0, 0, 0, 0.36, 0.36, 0.36),
-      _torusY(0.19, 0.05, 2.01)]);
+    CHGEO.grlTorso = mergeGeos([ // salmon sweater, bulky fit (portrait match)
+      part(new THREE.CylinderGeometry(0.40, 0.33, 0.80, 16), 0, 1.65, 0, 0, 0, 0, 1, 1, 1),
+      part(CHSPH_LO, 0.36, 1.95, 0, 0, 0, 0, 0.37, 0.37, 0.37),
+      part(CHSPH_LO, -0.36, 1.95, 0, 0, 0, 0, 0.37, 0.37, 0.37),
+      _torusY(0.20, 0.05, 2.01)]);
     CHGEO.grlCables = mergeGeos([ // cable-knit rings around the sweater
       _torusY(0.328, 0.02, 1.45), _torusY(0.348, 0.02, 1.65), _torusY(0.362, 0.02, 1.85)]);
-    var puffs = [ // boy's curly hair: clustered puffs (head-local)
+    var puffs = [ // boy's curly hair: dense clustered curls (head-local, portrait match)
       [0, 0.30, 0.03, 0.30], [0.17, 0.26, 0.08, 0.28], [-0.17, 0.26, 0.08, 0.28],
       [0.28, 0.18, -0.02, 0.28], [-0.28, 0.18, -0.02, 0.28],
       [0.10, 0.30, -0.14, 0.30], [-0.10, 0.30, -0.14, 0.30],
       [0.22, 0.22, -0.20, 0.26], [-0.22, 0.22, -0.20, 0.26],
       [0, 0.24, -0.30, 0.28],
-      [0.13, 0.34, 0.16, 0.24], [-0.13, 0.34, 0.16, 0.24]];
+      [0.13, 0.34, 0.16, 0.24], [-0.13, 0.34, 0.16, 0.24],
+      [0.24, 0.30, 0.10, 0.24], [-0.24, 0.30, 0.10, 0.24], // density layer
+      [0.30, 0.10, -0.10, 0.24], [-0.30, 0.10, -0.10, 0.24],
+      [0.16, 0.16, -0.26, 0.24], [-0.16, 0.16, -0.26, 0.24],
+      [0.06, 0.38, -0.02, 0.24], [-0.06, 0.38, -0.02, 0.24],
+      [0.30, 0.02, 0.06, 0.22], [-0.30, 0.02, 0.06, 0.22]];
     CHGEO.boyHair = mergeGeos(puffs.map(function (p) {
       return part(CHSPH_LO, p[0], p[1], p[2], 0, 0, 0, p[3], p[3] * 0.9, p[3]);
     }));
@@ -1862,17 +1931,23 @@ function init(canvasId) {
       new THREE.Vector3(0.30, 0.16, -0.04), new THREE.Vector3(0.345, -0.12, 0.03),
       new THREE.Vector3(0.36, -0.42, 0.08), new THREE.Vector3(0.345, -0.72, 0.10),
       new THREE.Vector3(0.32, -1.00, 0.10), new THREE.Vector3(0.30, -1.22, 0.08)];
-    var bp = [part(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(bpts), 16, 0.088, 10),
+    var bp = [part(new THREE.TubeGeometry(new THREE.CatmullRomCurve3(bpts), 16, 0.098, 10),
       0, 0, 0, 0, 0, 0, 1, 1, 1)];
-    var taper = [0.080, 0.068, 0.056, 0.044];
+    var taper = [0.092, 0.078, 0.064, 0.050]; // long, thick braid
     for (var bi = 0; bi < 4; bi++) {
       var q = bpts[2 + bi];
       bp.push(part(CHSPH_LO, q.x, q.y, q.z, 0, 0, 0, taper[bi] * 2, taper[bi] * 2, taper[bi] * 2));
     }
     CHGEO.grlBraid = mergeGeos(bp);
-    CHGEO.shoe = mergeGeos([ // boy's gray shoes: box + rounded toe (hip-pivot space)
+    CHGEO.grlBead = mergeGeos([ // pink hair tie + bead cluster at the braid end
+      part(new THREE.TorusGeometry(0.075, 0.030, 8, 18), 0.30, -1.15, 0.085, Math.PI / 2, 0, 0, 1, 1, 1),
+      part(CHSPH_LO, 0.30, -1.26, 0.08, 0, 0, 0, 0.085, 0.085, 0.085),
+      part(CHSPH_LO, 0.335, -1.30, 0.10, 0, 0, 0, 0.06, 0.06, 0.06),
+      part(CHSPH_LO, 0.265, -1.30, 0.10, 0, 0, 0, 0.06, 0.06, 0.06)]);
+    CHGEO.shoe = mergeGeos([ // boy's gray loafers: box + rounded toe + seam ridge
       part(GEO.box, 0, -1.22, 0.08, 0, 0, 0, 0.30, 0.22, 0.46),
-      part(CHSPH_LO, 0, -1.23, 0.28, 0, 0, 0, 0.26, 0.20, 0.26)]);
+      part(CHSPH_LO, 0, -1.23, 0.28, 0, 0, 0, 0.26, 0.20, 0.26),
+      part(GEO.box, 0, -1.13, 0.22, 0.18, 0, 0, 0.26, 0.025, 0.035)]);
     CHGEO.boot = mergeGeos([ // girl's tall cream boots: shaft + foot + toe
       part(new THREE.CylinderGeometry(0.155, 0.175, 0.68, 12), 0, -0.94, 0, 0, 0, 0, 1, 1, 1),
       part(GEO.box, 0, -1.26, 0.07, 0, 0, 0, 0.28, 0.18, 0.44),
@@ -1895,7 +1970,7 @@ function init(canvasId) {
 
   /* Builds a fully rigged character.
      opt: {name, girl, sweater, pants, torsoGeo, trimGeo, trimMat,
-           hairGeo, hairGeo2, legLowMat} — boy: shin+shoe, girl: boot (legLowGeo) */
+           hairGeo, hairGeo2, hairMat, beadGeo, legLowMat} */
   function buildCharacter(opt) {
     var group = new THREE.Group();   // world position + yaw
     var rig = new THREE.Group();     // walk bob + forward lean
@@ -1909,10 +1984,14 @@ function init(canvasId) {
     var eyeG = new THREE.Group(); eyeG.position.set(0, 0.06, 0.26); headG.add(eyeG);
     eyeG.add(new THREE.Mesh(CHGEO.eyeW, CHMAT.eyeW));   // no shadow: tiny
     eyeG.add(new THREE.Mesh(CHGEO.pupil, CHMAT.pupil));  // no shadow: tiny
+    eyeG.add(new THREE.Mesh(CHGEO.hl, CHMAT.hl));       // catchlight
+    if (opt.girl) eyeG.scale.x = 1.18;                   // Tara's bigger expressive eyes
     HM(CHGEO.brows, CHMAT.brow);
     HM(CHGEO.smile, CHMAT.mouth);
-    HM(opt.hairGeo, CHMAT.hair);
-    if (opt.hairGeo2) HM(opt.hairGeo2, CHMAT.hair);
+    HM(CHGEO.blush, CHMAT.blush);
+    HM(opt.hairGeo, opt.hairMat);
+    if (opt.hairGeo2) HM(opt.hairGeo2, opt.hairMat);
+    if (opt.beadGeo) HM(opt.beadGeo, CHMAT.bead);
     function arm(side) { // shoulder pivot; arm hangs -y, character faces +z
       var piv = new THREE.Group(); piv.position.set(0.47 * side, 1.94, 0); rig.add(piv);
       var a = new THREE.Mesh(CHGEO.arm, opt.sweater); a.castShadow = true; piv.add(a);
@@ -1948,14 +2027,15 @@ function init(canvasId) {
   var playerRig = buildCharacter({
     name: 'You', girl: false, sweater: CHMAT.boySw, pants: CHMAT.boyPn,
     torsoGeo: CHGEO.boyTorso, trimGeo: CHGEO.boyHem, trimMat: CHMAT.boyHem,
-    hairGeo: CHGEO.boyHair, legLowMat: CHMAT.boySh
+    hairGeo: CHGEO.boyHair, hairMat: CHMAT.hair, legLowMat: CHMAT.boySh
   });
   var player = playerRig.group;
   /* ---- partner = the GIRL (Tara) ---- */
   var partnerRig = buildCharacter({
     name: 'Tara', girl: true, sweater: CHMAT.grlSw, pants: CHMAT.grlPn,
     torsoGeo: CHGEO.grlTorso, trimGeo: CHGEO.grlCables, trimMat: CHMAT.grlCb,
-    hairGeo: CHGEO.grlCap, hairGeo2: CHGEO.grlBraid,
+    hairGeo: CHGEO.grlCap, hairGeo2: CHGEO.grlBraid, hairMat: CHMAT.hairG,
+    beadGeo: CHGEO.grlBead,
     legLowGeo: CHGEO.boot, legLowMat: CHMAT.grlBt
   });
   var partner = partnerRig.group;
