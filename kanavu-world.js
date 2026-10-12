@@ -895,8 +895,8 @@ function init(canvasId) {
     var inp = inputVector();
     /* camera-relative movement */
     var sin = Math.sin(orbit.yaw), cos = Math.cos(orbit.yaw);
-    var dx = inp.x * cos - inp.z * sin;
-    var dz = -inp.x * sin - inp.z * cos;
+    var dx = inp.x * cos + inp.z * sin;
+    var dz = -inp.x * sin + inp.z * cos;
     var speed = 11;
     var nx = player.position.x + dx * speed * dt;
     var nz = player.position.z + dz * speed * dt;
