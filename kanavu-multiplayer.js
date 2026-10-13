@@ -125,9 +125,10 @@ function init(worldApi, opts) {
     var dx = pos.x - state.lastSent.x, dz = pos.z - state.lastSent.z;
     var moved = Math.hypot(dx, dz) > POS_EPSILON;
     var turned = Math.abs(anim.yaw - state.lastSent.yaw) > YAW_EPSILON;
-    var animChanged = anim.moving !== state.lastSent.moving || anim.sitting !== state.lastSent.sitting;
+    var animChanged = anim.moving !== state.lastSent.moving || anim.sitting !== state.lastSent.sitting ||
+      anim.activity !== state.lastSent.activity;
     if (!force && !moved && !turned && !animChanged) return;
-    state.lastSent = { x: pos.x, y: pos.y, z: pos.z, yaw: anim.yaw, moving: anim.moving, sitting: anim.sitting };
+    state.lastSent = { x: pos.x, y: pos.y, z: pos.z, yaw: anim.yaw, moving: anim.moving, sitting: anim.sitting, activity: anim.activity };
     state.pairChannel.send({
       type: 'broadcast',
       event: 'pos',
@@ -135,7 +136,7 @@ function init(worldApi, opts) {
         id: myId, name: playerName,
         x: +pos.x.toFixed(2), y: +pos.y.toFixed(2), z: +pos.z.toFixed(2),
         yaw: +anim.yaw.toFixed(3),
-        moving: anim.moving, sitting: anim.sitting,
+        moving: anim.moving, sitting: anim.sitting, activity: anim.activity || 'idle',
         t: Date.now()
       }
     });
@@ -279,11 +280,11 @@ function init(worldApi, opts) {
       if (!p || p.id === myId) return;
       try {
         if (worldApi.setPartnerRemote) worldApi.setPartnerRemote(true);
-        if (worldApi.setPartnerNet) worldApi.setPartnerNet(p.x, p.y, p.z, p.yaw, p.moving, p.sitting);
+        if (worldApi.setPartnerNet) worldApi.setPartnerNet(p.x, p.y, p.z, p.yaw, p.moving, p.sitting, p.activity);
       } catch (e) {}
       // Notify listeners
       state.partnerCbs.forEach(function (fn) {
-        try { fn({ x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: p.moving, sitting: p.sitting, name: p.name || state.partnerName }); } catch (e) {}
+        try { fn({ x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: p.moving, sitting: p.sitting, activity: p.activity, name: p.name || state.partnerName }); } catch (e) {}
       });
     });
 

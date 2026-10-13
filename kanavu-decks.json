@@ -1,0 +1,423 @@
+{
+  "decks": [
+    {
+      "id": "first-hellos",
+      "name": "First Hellos",
+      "icon": "👋",
+      "blurb": "The questions every great love story starts with.",
+      "unlock": {
+        "type": "free"
+      },
+      "cards": [
+        "What's the story behind your name? Does it mean anything special?",
+        "What does a perfect lazy Sunday look like for you?",
+        "What's the first thing you do when you wake up in the morning?",
+        "Are you a coffee person, a tea person, or a 'don't talk to me until noon' person?",
+        "What's your go-to comfort food when the day has been rough?",
+        "What city or place feels like home to you, even if you've never lived there?",
+        "What's something you're weirdly good at?",
+        "What's the last song you had on repeat?",
+        "Morning person or night owl — and has anyone ever convinced you to switch?",
+        "What's a small thing that instantly makes your day better?",
+        "If you could have dinner with any one person, living or not, who would it be?",
+        "What's your favorite way to spend a rainy day?",
+        "What was your dream job as a kid?",
+        "What's a skill you've always wanted to learn but never got around to?",
+        "What's the most beautiful place you've ever been?",
+        "Do you believe in love at first sight, or is that just movie magic?",
+        "What's your love language — words, touch, time, gifts, or acts of service?",
+        "What's something on your bucket list that surprises people?",
+        "What's the best compliment you've ever received?",
+        "If we met in person for the first time tomorrow, what's the first thing you'd want to show me?"
+      ]
+    },
+    {
+      "id": "fun-funny",
+      "name": "Fun & Funny",
+      "icon": "😂",
+      "blurb": "Silly questions, serious laughs.",
+      "unlock": {
+        "type": "day",
+        "day": 2
+      },
+      "cards": [
+        "If you were a vegetable, which one would you be and why?",
+        "What's the weirdest dream you've ever had that you still remember?",
+        "If we had a theme song as a couple, what would it be?",
+        "What's the most embarrassing song on your playlist?",
+        "If you could swap lives with me for one day, what's the first thing you'd do?",
+        "What's the funniest thing you've ever Googled?",
+        "If our relationship had a mascot, what animal would it be?",
+        "What's your most useless talent?",
+        "If you had to eat only one cuisine for the rest of your life, which survives?",
+        "What's the silliest argument you've ever had with someone?",
+        "If we were on a reality show together, which one would we win?",
+        "What's a conspiracy theory you low-key believe?",
+        "If you could add one ridiculous law everyone had to follow, what would it be?",
+        "What's the worst haircut you've ever had? Describe it in detail.",
+        "If your life had a blooper reel, what's on it?",
+        "What's something you believed as a kid that turned out to be completely wrong?",
+        "If we were cartoon characters, who would we be?",
+        "Dance battle: what song do you bring, and what's your signature move?",
+        "What's the most dramatic overreaction you've ever had to something tiny?",
+        "If you had to narrate my life like a sports commentator right now, what would you say?"
+      ]
+    },
+    {
+      "id": "sweet-nothings",
+      "name": "Sweet Nothings",
+      "icon": "💕",
+      "blurb": "Soft questions for softer moments.",
+      "unlock": {
+        "type": "day",
+        "day": 3
+      },
+      "cards": [
+        "What's the sweetest thing anyone has ever done for you?",
+        "When did you first realize you were falling for me?",
+        "What's your favorite memory of us so far?",
+        "What do you miss most about me when we're apart?",
+        "What's a little thing I do that makes you smile every time?",
+        "If you could bottle one moment with me and keep it forever, which would you pick?",
+        "What's the most romantic movie moment you wish we could live out?",
+        "What nickname would you give me if you had to invent one right now?",
+        "What's something about me that you find beautiful that I probably don't even notice?",
+        "If you could write me a three-word love note, what would it say?",
+        "What's the first thing you want to do when we finally meet in person?",
+        "What's a song that reminds you of me?",
+        "What's the kindest thing I could do for you today?",
+        "If our love had a flavor, what would it taste like?",
+        "What's your favorite thing about the way we talk to each other?",
+        "What do you daydream about when you think of us?",
+        "What's one promise you want to make to me right now?",
+        "If you could give me one gift that money can't buy, what would it be?",
+        "What makes you feel most loved by me?",
+        "Describe our perfect evening together in three sentences."
+      ]
+    },
+    {
+      "id": "flirty",
+      "name": "Flirty",
+      "icon": "😘",
+      "blurb": "A little mischief, a lot of chemistry.",
+      "unlock": {
+        "type": "day",
+        "day": 5
+      },
+      "cards": [
+        "What's the most attractive thing about me that has nothing to do with looks?",
+        "If we were stuck in an elevator together for an hour, what would happen?",
+        "What's your favorite physical feature of mine? Be specific.",
+        "What's the boldest thing you've ever wanted to say to me but didn't?",
+        "If you could kiss me right now, where would we be?",
+        "What's something I do that you find unexpectedly attractive?",
+        "Describe your ideal slow dance with me — song, setting, everything.",
+        "What's the flirtiest text you've ever sent? Show me.",
+        "If we had one night with zero rules, where would we go?",
+        "What's a secret little fantasy you've never told anyone?",
+        "What would you do if I showed up at your door right now?",
+        "What's the most romantic place you've ever imagined us together?",
+        "If you could steal one kiss from any moment in our story so far, which would you pick?",
+        "What's something you want to whisper in my ear?",
+        "How would you describe the way I make you feel in one word? Now explain it.",
+        "What's your idea of the perfect goodnight?",
+        "If our first kiss were a movie scene, how would it play out?",
+        "What's one thing you're dying to do together that we haven't yet?"
+      ]
+    },
+    {
+      "id": "memories",
+      "name": "Memories",
+      "icon": "📸",
+      "blurb": "Look how far we've come.",
+      "unlock": {
+        "type": "day",
+        "day": 7
+      },
+      "cards": [
+        "What's your very first memory of me?",
+        "What was going through your head the first time we talked?",
+        "What's the funniest memory we share?",
+        "What's a moment with me that you replay in your head when you can't sleep?",
+        "What was the first thing about me that surprised you?",
+        "What's the sweetest message I've ever sent you?",
+        "What's a 'remember when' story you love telling about us?",
+        "What's the hardest we've ever laughed together?",
+        "What's a small moment between us that felt huge at the time?",
+        "What's the first photo or video of mine that made your heart skip?",
+        "What's something we used to do together that you miss?",
+        "What's the most meaningful gift I've ever given you — and why did it matter?",
+        "What's a tradition we've started without even realizing it?",
+        "What's the bravest thing we've done together?",
+        "What's a moment you wish you could relive with me?",
+        "What's something I said early on that stuck with you?",
+        "Tell our story in one paragraph — your version.",
+        "If we made a scrapbook of us, what goes on the first page?"
+      ]
+    },
+    {
+      "id": "would-you-rather",
+      "name": "Would You Rather",
+      "icon": "🤔",
+      "blurb": "Choose wisely. There are no wrong answers. (Mostly.)",
+      "unlock": {
+        "type": "day",
+        "day": 10
+      },
+      "cards": [
+        "Would you rather have a video call every night or one surprise visit a month?",
+        "Would you rather we lived in a tiny cabin in the mountains or a beach house?",
+        "Would you rather know everything I'm thinking or keep some mystery?",
+        "Would you rather have unlimited date nights or unlimited travel together?",
+        "Would you rather I serenade you badly or cook you a terrible dinner?",
+        "Would you rather wake up to a love letter or fall asleep to my voice?",
+        "Would you rather we met in a rom-com or an adventure movie?",
+        "Would you rather have a star named after us or a song written about us?",
+        "Would you rather slow dance in the kitchen or stargaze on a rooftop?",
+        "Would you rather I plan a surprise date or we plan it together?",
+        "Would you rather we never argued again, or argued but always made up beautifully?",
+        "Would you rather have a time machine to relive our best day or a crystal ball to see our future?",
+        "Would you rather be snowed in together for a week or road-tripping with no destination?",
+        "Would you rather I remembered every anniversary or surprised you on random Tuesdays?",
+        "Would you rather hold hands everywhere or have a secret signal only we know?",
+        "Would you rather our first dance be slow and sweet or fun and silly?",
+        "Would you rather read each other's diaries or keep some pages private forever?",
+        "Would you rather have one grand romantic gesture a year or tiny sweet ones every day?",
+        "Would you rather fall asleep on a call together or wake up to a good morning voice note?",
+        "Would you rather we aged like fine wine or stayed young at heart forever?"
+      ]
+    },
+    {
+      "id": "ld-survival",
+      "name": "Long-Distance Survival",
+      "icon": "✈️",
+      "blurb": "For the miles between us.",
+      "unlock": {
+        "type": "day",
+        "day": 14
+      },
+      "cards": [
+        "What's the hardest part of the distance for you, honestly?",
+        "What gets you through the lonely nights?",
+        "What are we counting down to right now — and how are you feeling about it?",
+        "What's one thing we should do together this week despite the distance?",
+        "How do you want me to comfort you when you're having a bad day far away?",
+        "What's a new ritual we could start to feel closer?",
+        "What's the first thing you'll do when we close the distance?",
+        "What's something you wish I understood better about your daily life?",
+        "How do we keep the spark alive when we can't touch?",
+        "What's the longest we've gone without talking, and how did it feel?",
+        "What's a surprise I could plan that would make the distance feel smaller?",
+        "What do you tell people when they ask how we make long distance work?",
+        "What's one thing the distance has actually made better about us?",
+        "If you could teleport to me for just one hour, what would we do?",
+        "What's your favorite way we've ever spent time together online?",
+        "What's something you're looking forward to doing in person that we can't do on a call?",
+        "How do you want to celebrate when we finally meet?",
+        "What promise do we make to each other about the distance?"
+      ]
+    },
+    {
+      "id": "gratitude",
+      "name": "Gratitude",
+      "icon": "🙏",
+      "blurb": "Say thank you like you mean it.",
+      "unlock": {
+        "type": "points",
+        "points": 100
+      },
+      "cards": [
+        "What's something I did recently that you're grateful for?",
+        "What's a quality of mine you're thankful I have?",
+        "Who in your life are you most grateful for, and why?",
+        "What's a small everyday thing you never want to take for granted?",
+        "What's something about our relationship you're grateful for today?",
+        "What's the kindest thing a stranger has ever done for you?",
+        "What's a hard time in your life that you're now grateful for?",
+        "What about your body or health are you thankful for right now?",
+        "What's a simple pleasure that never fails to make you grateful?",
+        "What's something I believed about you that you're grateful for?",
+        "What's a memory you're grateful we got to make together?",
+        "What about your family are you thankful for?",
+        "What's a lesson someone taught you that you're grateful for?",
+        "What's something about where you live right now that you appreciate?",
+        "What's a dream you have that you're grateful you get to chase?",
+        "Write me a tiny thank-you note for something only I'd understand."
+      ]
+    },
+    {
+      "id": "reassurance",
+      "name": "Reassurance",
+      "icon": "🤗",
+      "blurb": "For the days you need to hear it.",
+      "unlock": {
+        "type": "points",
+        "points": 150
+      },
+      "cards": [
+        "What's worrying you right now? Let me carry some of it.",
+        "What do you need to hear from me today?",
+        "What's a fear you have about us that you've been holding in?",
+        "What makes you feel most secure in our relationship?",
+        "When you feel distant from me, what helps you feel close again?",
+        "What's something you're afraid to ask me?",
+        "What do I do that makes you feel safe?",
+        "What's a doubt you've had that turned out to be wrong?",
+        "How can I love you better when you're feeling insecure?",
+        "What's something you need me to promise you?",
+        "What does 'forever' mean to you when you say it about us?",
+        "What's the strongest evidence you have that we're going to make it?",
+        "When you're overthinking at 2am, what would you want me to say?",
+        "What's something about us that will never change, no matter what?",
+        "If you could hear one sentence from me on repeat, what would it be?",
+        "What do you want me to remember about you on your hardest days?"
+      ]
+    },
+    {
+      "id": "date-night",
+      "name": "Date Night",
+      "icon": "🍷",
+      "blurb": "Plan it, dream it, do it.",
+      "unlock": {
+        "type": "points",
+        "points": 150
+      },
+      "cards": [
+        "Describe your dream date night with me, start to finish.",
+        "What's a date we've never done that you really want to try?",
+        "Fancy restaurant or street food adventure — what's our vibe tonight?",
+        "What's the perfect movie for our next watch-together?",
+        "If we cooked together tonight, what would we make?",
+        "What's a virtual date idea we haven't tried yet?",
+        "What's your ideal ratio of planning vs. spontaneity on a date?",
+        "What's the most romantic meal you've ever had?",
+        "If we had an unlimited date-night budget, what would we do?",
+        "What's a little surprise you'd love on a date night?",
+        "What's your favorite thing to wear on a date with me?",
+        "What's the best first-date story you've ever heard — besides ours?",
+        "If we could have a date anywhere in the world tonight, where?",
+        "What's a date-night tradition you want us to start?",
+        "What's the perfect end to a perfect date night?",
+        "What's something silly we should do on our next date just for fun?",
+        "How do you like to be asked out — grand gesture or casual 'hey, you free?'",
+        "What's a date idea that would surprise me?"
+      ]
+    },
+    {
+      "id": "ooh-asking",
+      "name": "Ooh, You're Asking That!",
+      "icon": "🙈",
+      "blurb": "Bold questions for brave hearts.",
+      "unlock": {
+        "type": "points",
+        "points": 200
+      },
+      "cards": [
+        "What's the most trouble you've ever been in? Full story.",
+        "What's a secret you've never told anyone — until now?",
+        "What's the biggest risk you've ever taken for love?",
+        "What's something you pretend to like but secretly don't?",
+        "What's the most embarrassing thing in your search history right now?",
+        "What's a hot take you have that most people would disagree with?",
+        "What's the pettiest thing you've ever done?",
+        "What's something you've kept to yourself that you should probably confess?",
+        "What's your most controversial food opinion?",
+        "What's the weirdest compliment you've ever received?",
+        "What's something you're weirdly competitive about?",
+        "What's the last thing that made you cry?",
+        "What's a grudge you've held way too long?",
+        "What's something you do when no one's watching?",
+        "What's the most rebellious thing you've ever done?",
+        "If you could ask me anything and I'd have to answer honestly, what would it be?"
+      ]
+    },
+    {
+      "id": "dream-together",
+      "name": "Dream Together",
+      "icon": "✨",
+      "blurb": "Let's build the future out loud.",
+      "unlock": {
+        "type": "points",
+        "points": 250
+      },
+      "cards": [
+        "Where do you see us in five years? Paint the picture.",
+        "What's our dream home like? Describe every room.",
+        "What city do we end up in — or do we keep wandering?",
+        "What's a dream trip we absolutely have to take together?",
+        "What does our perfect ordinary Tuesday look like someday?",
+        "What's a tradition you want us to have when we're old?",
+        "What do you want our life to feel like, in one word?",
+        "What's something you want us to learn together?",
+        "What's a big dream of yours that I can help with?",
+        "What's our retirement plan — beach, mountains, or something wilder?",
+        "What would you name our future pet, and what kind is it?",
+        "What's a skill you want us to be 'that couple' known for?",
+        "What's the first thing we do the morning after we move in together?",
+        "What's a dream you're scared to say out loud? Say it here.",
+        "What kind of parents do you think we'd be?",
+        "What's a project we could build together?",
+        "What's the legacy you want us to leave?",
+        "If we wrote our story's next chapter tonight, what happens?"
+      ]
+    },
+    {
+      "id": "how-well",
+      "name": "How Well Do You Know Me?",
+      "icon": "🧠",
+      "blurb": "Guess first — then I'll tell you the truth.",
+      "unlock": {
+        "type": "points",
+        "points": 300
+      },
+      "cards": [
+        "What's my go-to order at a restaurant?",
+        "What's my biggest pet peeve?",
+        "What's the movie I can quote from start to finish?",
+        "What's my most-used emoji?",
+        "What would I grab first if my place was on fire — after people and pets?",
+        "What's my guilty pleasure TV show?",
+        "What's the food I can't stand?",
+        "What's my favorite season, and why?",
+        "What's something I'm secretly really proud of?",
+        "What's my usual coffee or tea order?",
+        "What's the app I spend the most time on?",
+        "What's my biggest fear?",
+        "What's my love language — and am I right about yours?",
+        "What's the gift I'd love most that no one would guess?",
+        "What's my idea of a perfect birthday?",
+        "What's something I always forget to do?",
+        "What's my hidden talent?",
+        "What's the compliment that would mean the most to me right now?"
+      ]
+    },
+    {
+      "id": "deep-waters",
+      "name": "Deep Waters",
+      "icon": "🌊",
+      "blurb": "For when you're ready to go deeper.",
+      "unlock": {
+        "type": "streak",
+        "days": 7
+      },
+      "cards": [
+        "What's a wound from your past that's still healing?",
+        "What's something you've never forgiven yourself for?",
+        "What does love mean to you now versus five years ago?",
+        "What's the hardest goodbye you've ever said?",
+        "What's something you believed about yourself that you're unlearning?",
+        "What are you most afraid of losing?",
+        "What's a part of you that you hide from most people?",
+        "What's the loneliest you've ever felt?",
+        "What would you tell your younger self about love?",
+        "What's something you need but struggle to ask for?",
+        "What's a belief you hold that you've never said out loud?",
+        "What's the difference between being alone and being lonely, for you?",
+        "What's something about grief or loss that changed you?",
+        "What do you want to be remembered for?",
+        "What's the most vulnerable you've ever felt with me?",
+        "If you could be fully, completely known by one person, what would you want them to see first?"
+      ]
+    }
+  ]
+}

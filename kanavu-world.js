@@ -1299,19 +1299,21 @@ function init(canvasId, opts) {
     g.rotation.y = b.yaw;
     registerChunk(g, b.x, b.z);
 
-    /* collider, door prompt (just outside the pad's front edge, reachable past the collider) */
+    /* collider, door prompt (just outside the slide-collider so it's always reachable) */
     var colR = Math.hypot(w + 5, d + 7) / 2 + 1;
     colliders.push({ x: b.x, z: b.z, r: colR });
     var dw = wpos(doorDx, 0, d / 2 + 0.1);
     b.door = { x: dw.x, z: dw.z, dx: doorDx };
-    var promptD = (d + 7) / 2 + 1.0; // pad front edge + margin; always within 5 of the collider edge
+    var promptD = colR + 0.8; // reachable ring: just outside where the collider leaves the player
     interactables.push({
-      x: b.x + b.fx * promptD, z: b.z + b.fz * promptD, r: 5,
-      label: spec.icon + ' Enter ' + spec.name,
+      x: b.x + b.fx * promptD, z: b.z + b.fz * promptD, r: 6.5,
+      label: spec.icon + ' ' + spec.name,
       action: function () {
         if (b.type === 'theatre' && window.KanavuSocial && window.KanavuSocial.openTheatre) {
           window.KanavuSocial.openTheatre();
-        } else enterInterior(b);
+        } else if (window.KanavuSocial && window.KanavuSocial.openBuilding) {
+          window.KanavuSocial.openBuilding(b.type); // popup pattern for every building; no interiors
+        }
       }
     });
   }
@@ -1597,11 +1599,13 @@ function init(canvasId, opts) {
     promptShownLabel = label; promptAction = onAction || null;
     promptEl.textContent = '';
     promptEl.appendChild(document.createTextNode(label + '   '));
-    var k = document.createElement('span');
-    k.style.cssText = 'opacity:0.65;font-size:13px;border:1px solid rgba(255,233,184,0.5);' +
-      'border-radius:6px;padding:2px 8px;';
-    k.textContent = 'E';
-    promptEl.appendChild(k);
+    if (!window.matchMedia || !window.matchMedia('(pointer: coarse)').matches) { // hide the E chip on touch devices
+      var k = document.createElement('span');
+      k.style.cssText = 'opacity:0.65;font-size:13px;border:1px solid rgba(255,233,184,0.5);' +
+        'border-radius:6px;padding:2px 8px;';
+      k.textContent = 'E';
+      promptEl.appendChild(k);
+    }
     promptEl.style.display = 'block';
   }
   function hidePrompt() {
@@ -1819,6 +1823,13 @@ function init(canvasId, opts) {
     if ('colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace;
     t.anisotropy = 4;
     return t;
+  }
+  function shadeHex(hex, amt) { // M6: darken/lighten a hex color by amt (-100..100)
+    var n = parseInt(String(hex).replace('#', ''), 16);
+    var r = Math.max(0, Math.min(255, (n >> 16) + amt));
+    var g = Math.max(0, Math.min(255, ((n >> 8) & 255) + amt));
+    var b = Math.max(0, Math.min(255, (n & 255) + amt));
+    return '#' + ((r << 16) | (g << 8) | b).toString(16).padStart(6, '0');
   }
   function knitTex(base, dark) { // vertical ribbed knit (boy's olive sweater)
     return _charCanvas(256, function (g, s) {
@@ -2211,6 +2222,41 @@ function init(canvasId, opts) {
       heartSprites.push(sp);
     }
   }
+  /* M8: shooting star (miss-you) */
+  var shootingStars = [];
+  function shootingStar() {
+    // A bright streak across the sky
+    var startX = player.position.x + (Math.random() - 0.5) * 60;
+    var startZ = player.position.z - 40 - Math.random() * 20;
+    var startY = 45 + Math.random() * 15;
+    var geo = new THREE.BufferGeometry();
+    var pts = new Float32Array(20 * 3);
+    for (var i = 0; i < 20; i++) {
+      pts[i * 3] = startX - i * 1.2;
+      pts[i * 3 + 1] = startY - i * 0.35;
+      pts[i * 3 + 2] = startZ;
+    }
+    geo.setAttribute('position', new THREE.BufferAttribute(pts, 3));
+    var mat = new THREE.LineBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.95 });
+    var line = new THREE.Line(geo, mat);
+    scene.add(line);
+    shootingStars.push({ line: line, age: 0, life: 1.8, vx: -28, vy: -8 });
+  }
+  function updateShootingStars(dt) {
+    for (var i = shootingStars.length - 1; i >= 0; i--) {
+      var s = shootingStars[i];
+      s.age += dt;
+      s.line.position.x += s.vx * dt;
+      s.line.position.y += s.vy * dt;
+      s.line.material.opacity = 0.95 * (1 - s.age / s.life);
+      if (s.age >= s.life) {
+        scene.remove(s.line);
+        s.line.geometry.dispose();
+        s.line.material.dispose();
+        shootingStars.splice(i, 1);
+      }
+    }
+  }
   var loveEmojiTex = null;
   function getLoveEmojiTex() {
     if (loveEmojiTex) return loveEmojiTex;
@@ -2322,16 +2368,17 @@ function init(canvasId, opts) {
      by network state instead of the follow AI. setPartnerNet() feeds target
      transform; updatePartner lerps toward it for smoothness. */
   var partnerRemote = false;
-  var partnerNet = { x: 0, y: 0, z: 0, yaw: 0, moving: false, sitting: false, t: 0 };
+  var partnerNet = { x: 0, y: 0, z: 0, yaw: 0, moving: false, sitting: false, activity: 'idle', t: 0 };
   function setPartnerRemote(b) {
     partnerRemote = !!b;
     if (!partnerRemote) partnerSeeking = true; // resume AI cleanly
   }
-  function setPartnerNet(x, y, z, yaw, moving, sitting) {
+  function setPartnerNet(x, y, z, yaw, moving, sitting, activity) {
     partnerNet.x = x; partnerNet.y = y; partnerNet.z = z;
     partnerNet.yaw = yaw;
     partnerNet.moving = !!moving;
     partnerNet.sitting = !!sitting;
+    partnerNet.activity = activity || 'idle';
     partnerNet.t = performance.now();
   }
   function isPartnerStale() {
@@ -2382,8 +2429,10 @@ function init(canvasId, opts) {
       while (dy < -Math.PI) dy += Math.PI * 2;
       partnerYaw += dy * (1 - Math.exp(-dt * 10));
       partner.rotation.y = partnerYaw;
-      if (partnerNet.sitting) applySitPose(partnerRig, dt, -0.55);
-      else updateCharacterAnim(partnerRig, dt, t, partnerNet.moving, 10.2);
+      /* M1: match the partner's activity pose (wheel/bike/sit/walk) */
+      var pact = partnerNet.activity || (partnerNet.sitting ? 'sit' : (partnerNet.moving ? 'walk' : 'idle'));
+      if (pact === 'sit' || pact === 'wheel') applySitPose(partnerRig, dt, -0.55);
+      else updateCharacterAnim(partnerRig, dt, t, partnerNet.moving || pact === 'walk', 10.2);
       return;
     }
     if (partnerHold) { // Phase 4: sitting with the player at the campfire (AI paused)
@@ -2950,8 +2999,121 @@ function init(canvasId, opts) {
     label: '🔥 Sit', disabled: false, action: doCampSit
   });
 
+  /* ---------------- M3: beacon (light together, daily streak) ---------------- */
+  var beacons = [];
+  function buildBeacon(cx, cz) {
+    var g = new THREE.Group();
+    var gy = groundHeight(cx, cz);
+    // stone base
+    var base = new THREE.Mesh(new THREE.CylinderGeometry(1.2, 1.5, 0.8, 8), new THREE.MeshStandardMaterial({ color: 0x8a7f72, roughness: 0.9 }));
+    base.position.y = 0.4;
+    base.castShadow = true;
+    g.add(base);
+    // pillar
+    var pillar = new THREE.Mesh(new THREE.CylinderGeometry(0.5, 0.7, 2.2, 8), new THREE.MeshStandardMaterial({ color: 0x6b5d4f, roughness: 0.85 }));
+    pillar.position.y = 1.9;
+    pillar.castShadow = true;
+    g.add(pillar);
+    // brazier bowl
+    var bowl = new THREE.Mesh(new THREE.CylinderGeometry(1.0, 0.6, 0.6, 10), new THREE.MeshStandardMaterial({ color: 0x3a2f28, roughness: 0.7, metalness: 0.3 }));
+    bowl.position.y = 3.2;
+    bowl.castShadow = true;
+    g.add(bowl);
+    // flame (hidden until lit)
+    var flame = new THREE.Mesh(new THREE.ConeGeometry(0.55, 1.4, 8), new THREE.MeshBasicMaterial({ color: 0xffa63d, transparent: true, opacity: 0.9 }));
+    flame.position.y = 4.1;
+    flame.visible = false;
+    g.add(flame);
+    // inner flame
+    var flame2 = new THREE.Mesh(new THREE.ConeGeometry(0.3, 0.9, 8), new THREE.MeshBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.95 }));
+    flame2.position.y = 4.0;
+    flame2.visible = false;
+    g.add(flame2);
+    // light
+    var light = new THREE.PointLight(0xff9a3d, 0, 25, 1.8);
+    light.position.y = 4.2;
+    g.add(light);
+    g.position.set(cx, gy, cz);
+    scene.add(g);
+    var beacon = { group: g, flame: flame, flame2: flame2, light: light, x: cx, z: cz, lit: false };
+    beacons.push(beacon);
+    return beacon;
+  }
+  // Place beacons near each island's plaza
+  var beaconA = buildBeacon(ISL_A.cx + 8, 18);
+  var beaconB = buildBeacon(ISL_B.cx - 8, 18);
+  function isBeaconLitToday() {
+    try {
+      var raw = localStorage.getItem('kanavu-beacon-lit');
+      if (!raw) return false;
+      var d = JSON.parse(raw);
+      var today = new Date().toISOString().slice(0, 10);
+      return d.date === today && d.lit;
+    } catch (e) { return false; }
+  }
+  function setBeaconLit(lit) {
+    var today = new Date().toISOString().slice(0, 10);
+    try { localStorage.setItem('kanavu-beacon-lit', JSON.stringify({ date: today, lit: !!lit })); } catch (e) {}
+    beacons.forEach(function (b) {
+      b.lit = !!lit;
+      b.flame.visible = !!lit;
+      b.flame2.visible = !!lit;
+      b.light.intensity = lit ? 30 : 0;
+    });
+    // update streak
+    if (lit) {
+      try {
+        var sRaw = localStorage.getItem('kanavu-beacon-streak-data');
+        var sData = sRaw ? JSON.parse(sRaw) : { streak: 0, last: null };
+        var yesterday = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+        if (sData.last === today) { /* already counted */ }
+        else if (sData.last === yesterday) { sData.streak += 1; }
+        else { sData.streak = 1; }
+        sData.last = today;
+        localStorage.setItem('kanavu-beacon-streak-data', JSON.stringify(sData));
+        localStorage.setItem('kanavu-beacon-streak', String(sData.streak));
+      } catch (e) {}
+    }
+  }
+  // Restore lit state on load
+  if (isBeaconLitToday()) {
+    beacons.forEach(function (b) {
+      b.lit = true; b.flame.visible = true; b.flame2.visible = true; b.light.intensity = 30;
+    });
+  }
+  function lightBeacon() {
+    if (isBeaconLitToday()) return;
+    setBeaconLit(true);
+    try { if (window.KanavuSocial && window.KanavuSocial.onBeaconLit) window.KanavuSocial.onBeaconLit(); } catch (e) {}
+    // notify partner
+    try {
+      var mp = window.KanavuMultiplayer;
+      if (mp && mp.sendMsg) mp.sendMsg('beacon', { lit: true });
+    } catch (e) {}
+  }
+  beacons.forEach(function (b) {
+    interactables.push({
+      x: b.x, z: b.z, r: 6,
+      label: '🔥 Light the beacon',
+      action: lightBeacon
+    });
+  });
+  // Animate flames
+  var beaconT = 0;
+
   /* ---------------- Phase 4 per-frame update ---------------- */
   function updatePhase4(dt, t) {
+    /* M3: beacon flame flicker */
+    beaconT += dt;
+    for (var bi = 0; bi < beacons.length; bi++) {
+      var bc = beacons[bi];
+      if (bc.lit) {
+        var f = 1 + Math.sin(beaconT * 13 + bi * 2.1) * 0.12 + Math.sin(beaconT * 29 + bi) * 0.06;
+        bc.flame.scale.set(f, 1 + (f - 1) * 1.6, f);
+        bc.flame2.scale.set(f, 1 + (f - 1) * 1.4, f);
+        bc.flame.rotation.y += dt * 2;
+      }
+    }
     for (var i = 0; i < wheels.length; i++) {
       var w = wheels[i];
       w.spin = lerp(w.spin, w.riding ? 0.12 : 0.045, 1 - Math.exp(-dt * 1.5));
@@ -3544,6 +3706,7 @@ function init(canvasId, opts) {
     updateHearts(dt);
     updateGift(dt, t);
     updatePhase4(dt, t); // Phase 4: sky wheels, boats, campfire warmth
+    updateShootingStars(dt); // M8: miss-you shooting stars
     updateCamera(dt);
     updateDayNight(dt, t);
     updateWeather(dt, t); // settings: rain / snow particles + overcast mood
@@ -3573,12 +3736,47 @@ function init(canvasId, opts) {
     );
     camera.lookAt(_camTarget);
   })();
+  try { renderer.compile(scene, camera); renderer.render(scene, camera); } catch (e) {} // warmup: upload textures, kill pop-in
+  /* M6: apply saved outfit color */
+  try {
+    var savedOutfit = localStorage.getItem('kanavu_outfit');
+    if (savedOutfit) {
+      var outfitMap = { olive: '#6d7f3c', salmon: '#e89a90', sky: '#7fb3d5', lavender: '#b8a9d9', rose: '#d98880', mint: '#82c99a' };
+      var oc = outfitMap[savedOutfit];
+      if (oc) {
+        var isGirl = myRole === 'girl';
+        var dark = shadeHex(oc, -25);
+        var tex = isGirl ? cableTex(oc, dark) : knitTex(oc, dark);
+        var mat = isGirl ? CHMAT.grlSw : CHMAT.boySw;
+        if (mat.map) mat.map.dispose();
+        mat.map = tex;
+        mat.needsUpdate = true;
+      }
+    }
+  } catch (e) {}
   animate();
 
   return {
     setTimeOfDay: function (h) { manualHour = (h === null || h === undefined) ? null : ((h % 24) + 24) % 24; },
     setWeather: setWeather, // 'clear' | 'rain' | 'snow'
     getWeather: function () { return weatherMode; },
+    sleep: function () { doSleep(); }, // house popup: sleep till morning
+    isBeaconLitToday: isBeaconLitToday, // M3: beacon state for Today tasks
+    lightBeacon: lightBeacon,
+    setOutfitColor: function (hex) { // M6: free outfit customization
+      try {
+        var playerRig = myRole === 'girl' ? girlRig : boyRig;
+        var isGirl = myRole === 'girl';
+        // Darken the hex for the rib/shadow color
+        var dark = shadeHex(hex, -25);
+        var tex = isGirl ? cableTex(hex, dark) : knitTex(hex, dark);
+        var mat = isGirl ? CHMAT.grlSw : CHMAT.boySw;
+        if (mat.map) mat.map.dispose();
+        mat.map = tex;
+        mat.needsUpdate = true;
+      } catch (e) {}
+    },
+    shootingStar: shootingStar, // M8: miss-you shooting star
     getPlayerPos: function () { return { x: player.position.x, y: player.position.y, z: player.position.z }; },
     getPartnerPos: function () { return { x: partner.position.x, y: partner.position.y, z: partner.position.z }; },
     getRole: function () { return myRole; },
@@ -3597,10 +3795,16 @@ function init(canvasId, opts) {
     setPartnerNet: setPartnerNet,       // Phase 5: feed network transform
     isPartnerRemote: function () { return partnerRemote; },
     getPlayerAnim: function () {        // Phase 5: animation state for sync
+      var act = 'idle';
+      if (ridingWheel) act = 'wheel';
+      else if (ridingBike) act = 'bike';
+      else if (sitting) act = 'sit';
+      else if (playerMovingState) act = 'walk';
       return {
         moving: playerMovingState,
         sitting: !!sitting,
-        yaw: playerYaw
+        yaw: playerYaw,
+        activity: act
       };
     },
     getPlayerYaw: function () { return playerYaw; },
