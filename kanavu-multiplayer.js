@@ -74,13 +74,23 @@ function clearPair() {
   try { localStorage.removeItem(LS_KEY); } catch (e) {}
 }
 
+function stubWorld() {
+  return {
+    getPlayerPos: function () { return { x: 0, y: 0, z: 0 }; },
+    getPlayerAnim: function () { return { moving: false, sitting: false, yaw: 0 }; },
+    setPartnerRemote: function () {},
+    setPartnerNet: function () {},
+    setPartnerOnline: function () {}
+  };
+}
+
 /* ================= main ================= */
 function init(worldApi, opts) {
   opts = opts || {};
   var playerName = opts.playerName || 'Player';
   var myId = opts.userId || ('u_' + uuid().slice(0, 8));
-
-  if (!worldApi) throw new Error('[mp] worldApi required');
+  // worldApi may be a stub until the 3D world loads; swap with setWorldApi()
+  if (!worldApi) worldApi = stubWorld();
   if (!window.supabase) throw new Error('[mp] Supabase JS v2 not loaded (window.supabase missing)');
 
   var sb = window.supabase.createClient(SUPABASE_URL, SUPABASE_ANON_KEY, {
@@ -89,6 +99,7 @@ function init(worldApi, opts) {
 
   var state = {
     role: null,           // 'host' | 'joiner'
+    myRole: opts.myRole === 'girl' ? 'girl' : 'boy', // character I play
     code: null,
     codeCreatedAt: 0,
     pairId: null,
@@ -140,6 +151,122 @@ function init(worldApi, opts) {
     if (state.syncTimer) { clearInterval(state.syncTimer); state.syncTimer = null; }
   }
 
+  /* ---------- generic social messaging (chat, emotes, gifts, hugs, questions) ---------- */
+  var msgCbs = {}; // type -> [fn]
+  function onMessage(type, fn) {
+    if (typeof fn !== 'function') return;
+    (msgCbs[type] = msgCbs[type] || []).push(fn);
+  }
+  function sendMsg(type, data) {
+    if (!state.pairChannel || state.destroyed) return false;
+    try {
+      state.pairChannel.send({
+        type: 'broadcast',
+        event: 'kvmsg',
+        payload: { id: myId, name: playerName, type: type, data: data || {}, t: Date.now() }
+      });
+      return true;
+    } catch (e) { return false; }
+  }
+  function handleKvMsg(msg) {
+    var p = msg.payload;
+    if (!p || p.id === myId || !p.type) return;
+    var cbs = msgCbs[p.type] || [];
+    for (var i = 0; i < cbs.length; i++) {
+      try { cbs[i]({ type: p.type, data: p.data, from: p.name || 'partner', t: p.t }); } catch (e) {}
+    }
+  }
+
+  /* ---------- voice chat (WebRTC, Supabase Realtime signaling) ---------- */
+  var voice = { want: false, peer: false, pc: null, stream: null, audioEl: null };
+  var voiceCbs = [];
+  function onVoiceState(fn) { if (typeof fn === 'function') voiceCbs.push(fn); }
+  function emitVoice() {
+    for (var i = 0; i < voiceCbs.length; i++) {
+      try { voiceCbs[i]({ mine: voice.want, peer: voice.peer, live: !!(voice.pc) }); } catch (e) {}
+    }
+  }
+  function ensureMic() {
+    if (voice.stream) return Promise.resolve(voice.stream);
+    return navigator.mediaDevices.getUserMedia({ audio: { echoCancellation: true, noiseSuppression: true } })
+      .then(function (s) { voice.stream = s; return s; });
+  }
+  function remoteAudio(stream) {
+    try {
+      if (!voice.audioEl) { voice.audioEl = new Audio(); voice.audioEl.autoplay = true; }
+      voice.audioEl.srcObject = stream;
+      var pr = voice.audioEl.play();
+      if (pr && pr.catch) pr.catch(function () {});
+    } catch (e) {}
+  }
+  function voiceStopPc() {
+    if (voice.pc) { try { voice.pc.close(); } catch (e) {} voice.pc = null; }
+    emitVoice();
+  }
+  function maybeVoiceStart() {
+    if (!voice.want || !voice.peer || voice.pc || !state.pairChannel || state.destroyed) return;
+    if (state.role !== 'host') return; // host calls; joiner answers
+    startVoicePc(true);
+  }
+  function startVoicePc(isCaller) {
+    try {
+      var pc = new RTCPeerConnection({ iceServers: [{ urls: 'stun:stun.l.google.com:19302' }] });
+      voice.pc = pc;
+      voice.stream.getTracks().forEach(function (tr) { pc.addTrack(tr, voice.stream); });
+      pc.onicecandidate = function (e) {
+        if (e.candidate) sendMsg('voice-signal', { kind: 'ice', c: e.candidate.toJSON() });
+      };
+      pc.ontrack = function (e) { if (e.streams && e.streams[0]) remoteAudio(e.streams[0]); };
+      pc.onconnectionstatechange = function () {
+        if (pc.connectionState === 'failed' || pc.connectionState === 'closed') voiceStopPc();
+      };
+      if (isCaller) {
+        pc.createOffer().then(function (o) { return pc.setLocalDescription(o); })
+          .then(function () { sendMsg('voice-signal', { kind: 'offer', sdp: pc.localDescription.toJSON() }); })
+          .catch(function () { voiceStopPc(); });
+      }
+      emitVoice();
+    } catch (e) { voiceStopPc(); }
+  }
+  function setVoice(on) {
+    voice.want = !!on;
+    sendMsg('voice-state', { on: voice.want });
+    if (voice.want) {
+      ensureMic().then(function () { maybeVoiceStart(); emitVoice(); })
+        .catch(function () { voice.want = false; emitVoice(); });
+    } else {
+      voiceStopPc();
+    }
+    emitVoice();
+    return voice.want;
+  }
+  onMessage('voice-state', function (m) {
+    voice.peer = !!(m.data && m.data.on);
+    if (voice.peer && voice.want) maybeVoiceStart();
+    else if (!voice.peer) voiceStopPc();
+    else emitVoice();
+  });
+  onMessage('voice-signal', function (m) {
+    var d = m.data || {};
+    try {
+      if (d.kind === 'offer' && voice.want && !voice.pc) {
+        ensureMic().then(function () {
+          startVoicePc(false);
+          var pc = voice.pc;
+          pc.setRemoteDescription(new RTCSessionDescription(d.sdp))
+            .then(function () { return pc.createAnswer(); })
+            .then(function (a) { return pc.setLocalDescription(a); })
+            .then(function () { sendMsg('voice-signal', { kind: 'answer', sdp: pc.localDescription.toJSON() }); })
+            .catch(function () { voiceStopPc(); });
+        }).catch(function () {});
+      } else if (d.kind === 'answer' && voice.pc) {
+        voice.pc.setRemoteDescription(new RTCSessionDescription(d.sdp)).catch(function () {});
+      } else if (d.kind === 'ice' && voice.pc) {
+        voice.pc.addIceCandidate(new RTCIceCandidate(d.c)).catch(function () {});
+      }
+    } catch (e) {}
+  });
+
   /* ---------- internal: pair channel ---------- */
   function subscribePairChannel(pairId) {
     if (state.pairChannel) { try { sb.removeChannel(state.pairChannel); } catch (e) {} }
@@ -150,7 +277,6 @@ function init(worldApi, opts) {
     ch.on('broadcast', { event: 'pos' }, function (msg) {
       var p = msg.payload;
       if (!p || p.id === myId) return;
-      // Feed into world partner rig
       try {
         if (worldApi.setPartnerRemote) worldApi.setPartnerRemote(true);
         if (worldApi.setPartnerNet) worldApi.setPartnerNet(p.x, p.y, p.z, p.yaw, p.moving, p.sitting);
@@ -160,6 +286,8 @@ function init(worldApi, opts) {
         try { fn({ x: p.x, y: p.y, z: p.z, yaw: p.yaw, moving: p.moving, sitting: p.sitting, name: p.name || state.partnerName }); } catch (e) {}
       });
     });
+
+    ch.on('broadcast', { event: 'kvmsg' }, handleKvMsg);
 
     ch.on('presence', { event: 'sync' }, function () {
       var pres = ch.presenceState();
@@ -212,11 +340,11 @@ function init(worldApi, opts) {
         var pairId = uuid();
         state.pairId = pairId;
         state.partnerName = p.name || 'Partner';
-        savePair({ pairId: pairId, partnerName: state.partnerName, role: 'host', at: Date.now() });
+        savePair({ pairId: pairId, partnerName: state.partnerName, role: 'host', myRole: state.myRole, at: Date.now() });
         // Tell joiner
         ch.send({
           type: 'broadcast', event: 'join-accept',
-          payload: { to: p.id, pairId: pairId, hostName: playerName }
+          payload: { to: p.id, pairId: pairId, hostName: playerName, hostRole: state.myRole }
         });
         // Switch to pair channel
         cleanupInvite();
@@ -272,10 +400,11 @@ function init(worldApi, opts) {
         done = true; clearTimeout(timeout);
         state.pairId = p.pairId;
         state.partnerName = p.hostName || 'Partner';
-        savePair({ pairId: p.pairId, partnerName: state.partnerName, role: 'joiner', at: Date.now() });
+        state.myRole = (p.hostRole === 'boy') ? 'girl' : 'boy'; // joiner takes the other character
+        savePair({ pairId: p.pairId, partnerName: state.partnerName, role: 'joiner', myRole: state.myRole, at: Date.now() });
         cleanupInvite();
         subscribePairChannel(p.pairId);
-        resolve({ pairId: p.pairId, partnerName: state.partnerName });
+        resolve({ pairId: p.pairId, partnerName: state.partnerName, myRole: state.myRole });
       });
 
       ch.on('broadcast', { event: 'join-reject' }, function (msg) {
@@ -290,7 +419,7 @@ function init(worldApi, opts) {
         if (status === 'SUBSCRIBED') {
           ch.send({
             type: 'broadcast', event: 'join-request',
-            payload: { id: myId, name: playerName, at: Date.now() }
+            payload: { id: myId, name: playerName, role: state.myRole, at: Date.now() }
           });
         } else if (status === 'CHANNEL_ERROR' || status === 'TIMED_OUT') {
           if (!done) { done = true; clearTimeout(timeout); reject(new Error('Realtime unavailable')); }
@@ -347,8 +476,13 @@ function init(worldApi, opts) {
     if (!s || !s.pairId) return Promise.reject(new Error('No saved pairing.'));
     state.pairId = s.pairId;
     state.partnerName = s.partnerName;
+    if (s.myRole) state.myRole = s.myRole;
     subscribePairChannel(s.pairId);
-    return Promise.resolve({ pairId: s.pairId, partnerName: s.partnerName });
+    return Promise.resolve({ pairId: s.pairId, partnerName: s.partnerName, myRole: state.myRole });
+  }
+
+  function setWorldApi(api) {
+    if (api) worldApi = api;
   }
 
   /* ================= invite UI ================= */
@@ -474,15 +608,24 @@ function init(worldApi, opts) {
     joinCode: joinCode,
     reconnectSaved: reconnectSaved,
     setOnline: setOnline,
+    setWorldApi: setWorldApi,
     onPartner: onPartner,
     onPresence: onPresence,
     getPartner: getPartner,
     getPairId: getPairId,
+    getMyRole: function () { return state.myRole; },
+    setMyRole: function (r) { state.myRole = (r === 'girl') ? 'girl' : 'boy'; },
+    sendMsg: sendMsg,
+    onMessage: onMessage,
+    setVoice: setVoice,
+    isVoiceOn: function () { return voice.want; },
+    onVoiceState: onVoiceState,
     hasSavedPair: function () { return !!(state._savedPair || loadPair()); },
+    getSavedPair: function () { return state._savedPair || loadPair(); },
     showUI: showUI,
     hideUI: hideUI,
     disconnect: disconnect,
-    version: 'phase5-1.0'
+    version: 'phase5-2.0'
   };
 }
 
