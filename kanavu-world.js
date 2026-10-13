@@ -117,7 +117,7 @@ var pierRects = []; // Phase 4: wooden piers are walkable {x0,x1,z0,z1,y}
 function walkHeight(x, z) {
   var zn = zoneAt(x, z); // Phase 2: interior rooms override terrain
   if (zn) return zn.y;
-  if (onBridge(x, z) && Math.abs(x) <= BRIDGE_HALF) return bridgeDeckY(x);
+  if (onBridge(x, z) && Math.abs(x) <= BRIDGE_HALF) return bridgeDeckY(x) + 0.11; // plank tops
   for (var pi = 0; pi < pierRects.length; pi++) { // Phase 4: stroll the dock
     var pr = pierRects[pi];
     if (x >= pr.x0 && x <= pr.x1 && z >= pr.z0 && z <= pr.z1) return pr.y;
@@ -394,10 +394,12 @@ function init(canvasId) {
 
   /* ---------------- scatter: trees / rocks / flowers / bushes -------------
      Instanced meshes grouped per island quadrant for 180-degree LOD. */
-  var lodChunks = []; // {obj, cx, cz}
-  function registerChunk(obj, cx, cz) {
+  var lodChunks = []; // {obj, cx, cz, noBehind, noLOD}
+  function registerChunk(obj, cx, cz, noBehind) {
     scene.add(obj);
-    lodChunks.push({ obj: obj, cx: cx, cz: cz });
+    var ch = { obj: obj, cx: cx, cz: cz, noBehind: !!noBehind, noLOD: false };
+    lodChunks.push(ch);
+    return ch;
   }
   var _dummy = new THREE.Object3D();
   function scatterPositions(center, count, seed, minH, excl) {
@@ -646,7 +648,7 @@ function init(canvasId) {
       });
     });
   })();
-  registerChunk(bridgeGroup, 0, 0);
+  registerChunk(bridgeGroup, 0, 0, true); // long span: never cull when its center falls behind the camera
   /* ---------------- campfire (island A social spot) ---------------- */
   var fireMats = [], fireLight;
   var campfirePos = { x: ISL_A.cx + 20, z: 25 };
@@ -1886,9 +1888,9 @@ function init(canvasId) {
       _torusY(0.10, 0.038, -0.63)]); // ribbed sweater cuff at the wrist
     CHGEO.hand = mergeGeos([part(CHSPH_LO, 0.03, -0.74, 0.06, 0, 0, 0, 0.23, 0.25, 0.23)]);
     CHGEO.thigh = mergeGeos([part(new THREE.CapsuleGeometry(0.15, 0.42, 4, 10), 0, -0.28, 0, 0, 0, 0, 1, 1, 1)]);
-    CHGEO.shin = mergeGeos([
-      part(new THREE.CapsuleGeometry(0.125, 0.50, 4, 10), 0, -0.72, 0.005, 0, 0, 0, 1, 1, 1),
-      _torusY(0.125, 0.045, -1.02)]); // elastic ankle cuff (joggers)
+    CHGEO.shinKnee = mergeGeos([ // knee-pivot space (knee sits at hip-space -0.55)
+      part(new THREE.CapsuleGeometry(0.125, 0.50, 4, 10), 0, -0.17, 0.005, 0, 0, 0, 1, 1, 1),
+      _torusY(0.125, 0.045, -0.47)]); // elastic ankle cuff (joggers)
   })();
   /* ---- per-character geometries: torsos, trim, hair, footwear ---- */
   (function buildVariantCharGeos() {
@@ -1944,14 +1946,14 @@ function init(canvasId) {
       part(CHSPH_LO, 0.30, -1.26, 0.08, 0, 0, 0, 0.085, 0.085, 0.085),
       part(CHSPH_LO, 0.335, -1.30, 0.10, 0, 0, 0, 0.06, 0.06, 0.06),
       part(CHSPH_LO, 0.265, -1.30, 0.10, 0, 0, 0, 0.06, 0.06, 0.06)]);
-    CHGEO.shoe = mergeGeos([ // boy's gray loafers: box + rounded toe + seam ridge
-      part(GEO.box, 0, -1.22, 0.08, 0, 0, 0, 0.30, 0.22, 0.46),
-      part(CHSPH_LO, 0, -1.23, 0.28, 0, 0, 0, 0.26, 0.20, 0.26),
-      part(GEO.box, 0, -1.13, 0.22, 0.18, 0, 0, 0.26, 0.025, 0.035)]);
-    CHGEO.boot = mergeGeos([ // girl's tall cream boots: shaft + foot + toe
-      part(new THREE.CylinderGeometry(0.155, 0.175, 0.68, 12), 0, -0.94, 0, 0, 0, 0, 1, 1, 1),
-      part(GEO.box, 0, -1.26, 0.07, 0, 0, 0, 0.28, 0.18, 0.44),
-      part(CHSPH_LO, 0, -1.27, 0.26, 0, 0, 0, 0.24, 0.17, 0.24)]);
+    CHGEO.shoeKnee = mergeGeos([ // boy's gray loafers (knee-pivot space)
+      part(GEO.box, 0, -0.67, 0.08, 0, 0, 0, 0.30, 0.22, 0.46),
+      part(CHSPH_LO, 0, -0.68, 0.28, 0, 0, 0, 0.26, 0.20, 0.26),
+      part(GEO.box, 0, -0.58, 0.22, 0.18, 0, 0, 0.26, 0.025, 0.035)]);
+    CHGEO.bootKnee = mergeGeos([ // girl's tall cream boots: shaft + foot + toe (knee-pivot space)
+      part(new THREE.CylinderGeometry(0.155, 0.175, 0.68, 12), 0, -0.39, 0, 0, 0, 0, 1, 1, 1),
+      part(GEO.box, 0, -0.71, 0.07, 0, 0, 0, 0.28, 0.18, 0.44),
+      part(CHSPH_LO, 0, -0.72, 0.26, 0, 0, 0, 0.24, 0.17, 0.24)]);
   })();
 
   function makeCharLabel(text) {
@@ -2000,25 +2002,27 @@ function init(canvasId) {
       return piv;
     }
     var shL = arm(-1), shR = arm(1);
-    function leg(side) { // hip pivot
+    function leg(side) { // hip pivot + knee pivot (proper sitting / pedaling)
       var piv = new THREE.Group(); piv.position.set(0.22 * side, 1.34, 0); rig.add(piv);
       var t = new THREE.Mesh(CHGEO.thigh, opt.pants); t.castShadow = true; piv.add(t);
+      var knee = new THREE.Group(); knee.position.set(0, -0.55, 0); piv.add(knee);
+      function KM(geo, mat) { var m = new THREE.Mesh(geo, mat); m.castShadow = true; knee.add(m); return m; }
       if (opt.girl) {
-        var b = new THREE.Mesh(CHGEO.boot, opt.legLowMat); b.castShadow = true; piv.add(b);
+        KM(CHGEO.bootKnee, opt.legLowMat);
       } else {
-        var s = new THREE.Mesh(CHGEO.shin, opt.pants); s.castShadow = true; piv.add(s);
-        var f = new THREE.Mesh(CHGEO.shoe, opt.legLowMat); f.castShadow = true; piv.add(f);
+        KM(CHGEO.shinKnee, opt.pants);
+        KM(CHGEO.shoeKnee, opt.legLowMat);
       }
-      return piv;
+      return { hip: piv, knee: knee };
     }
-    var hipL = leg(-1), hipR = leg(1);
+    var legL = leg(-1), legR = leg(1);
     var glow = new THREE.Mesh(GEO.circle, charGlowMat); // warm ground glow
     glow.rotation.x = -Math.PI / 2; glow.position.y = 0.12; glow.scale.set(5.5, 5.5, 1);
     group.add(glow);
     group.add(makeCharLabel(opt.name));
     return {
       group: group, rig: rig, torso: torso, headG: headG, eyeG: eyeG,
-      shL: shL, shR: shR, hipL: hipL, hipR: hipR,
+      shL: shL, shR: shR, hipL: legL.hip, hipR: legR.hip, kneeL: legL.knee, kneeR: legR.knee,
       phase: 0, blinkT: 2 + Math.random() * 2.5, blinkCd: 0, blinked: false, lean: 0
     };
   }
@@ -2059,6 +2063,8 @@ function init(canvasId) {
       var s = Math.sin(c.phase);
       c.hipL.rotation.x = s * 0.55;
       c.hipR.rotation.x = -s * 0.55;
+      c.kneeL.rotation.x = lerp(c.kneeL.rotation.x, Math.max(0, -s * 0.55) * 0.85 + 0.05, k); // knee flex on swing-through
+      c.kneeR.rotation.x = lerp(c.kneeR.rotation.x, Math.max(0, s * 0.55) * 0.85 + 0.05, k);
       c.shL.rotation.x = -s * 0.45; // arms oppose legs
       c.shR.rotation.x = s * 0.45;
       c.rig.position.y = Math.abs(Math.cos(c.phase)) * 0.07; // bob, 2x per cycle
@@ -2067,6 +2073,8 @@ function init(canvasId) {
     } else {
       c.hipL.rotation.x = lerp(c.hipL.rotation.x, 0, k);
       c.hipR.rotation.x = lerp(c.hipR.rotation.x, 0, k);
+      c.kneeL.rotation.x = lerp(c.kneeL.rotation.x, 0.05, k); // soft standing knees
+      c.kneeR.rotation.x = lerp(c.kneeR.rotation.x, 0.05, k);
       c.shL.rotation.x = lerp(c.shL.rotation.x, 0, k);
       c.shR.rotation.x = lerp(c.shR.rotation.x, 0, k);
       c.shL.rotation.z = lerp(c.shL.rotation.z, -0.10, k);
@@ -2301,19 +2309,24 @@ function init(canvasId) {
   }
   var vcMat = new THREE.MeshStandardMaterial({ vertexColors: true, roughness: 0.85 });
 
-  /* ---- shared sitting pose (campfire benches, wheel gondolas) ---- */
+  /* ---- shared sitting pose (campfire benches, wheel gondolas) ----
+     Proper sit: thighs forward horizontal, knees bent 75deg, shins vertical,
+     feet planted, torso upright, hands resting toward the knees. */
   function applySitPose(c, dt, rigY) {
     var k = 1 - Math.exp(-dt * 8);
-    c.hipL.rotation.x = lerp(c.hipL.rotation.x, -1.25, k);
-    c.hipR.rotation.x = lerp(c.hipR.rotation.x, -1.25, k);
-    c.shL.rotation.x = lerp(c.shL.rotation.x, -0.5, k);
-    c.shR.rotation.x = lerp(c.shR.rotation.x, -0.5, k);
-    c.shL.rotation.z = lerp(c.shL.rotation.z, -0.10, k);
-    c.shR.rotation.z = lerp(c.shR.rotation.z, 0.10, k);
+    c.hipL.rotation.x = lerp(c.hipL.rotation.x, -1.40, k);
+    c.hipR.rotation.x = lerp(c.hipR.rotation.x, -1.40, k);
+    c.kneeL.rotation.x = lerp(c.kneeL.rotation.x, 1.32, k);
+    c.kneeR.rotation.x = lerp(c.kneeR.rotation.x, 1.32, k);
+    c.shL.rotation.x = lerp(c.shL.rotation.x, -0.55, k);
+    c.shR.rotation.x = lerp(c.shR.rotation.x, -0.55, k);
+    c.shL.rotation.z = lerp(c.shL.rotation.z, -0.12, k);
+    c.shR.rotation.z = lerp(c.shR.rotation.z, 0.12, k);
     c.rig.position.y = lerp(c.rig.position.y, rigY, k);
-    c.lean = lerp(c.lean, -0.04, k);
+    c.lean = lerp(c.lean, 0.03, k);
     c.rig.rotation.x = c.lean;
     c.headG.rotation.y = lerp(c.headG.rotation.y, 0, k);
+    c.headG.rotation.z = lerp(c.headG.rotation.z, 0, k);
   }
 
   /* ---------------- 1. rideable sky wheel ---------------- */
@@ -2367,6 +2380,17 @@ function init(canvasId) {
     });
     var rim = new THREE.Mesh(new THREE.TorusGeometry(R, 0.28, 10, 44), rimMat);
     rim.castShadow = true; rotor.add(rim); windowMats.push(rimMat); // night glow
+    var bulbParts = []; // festive light bulbs around the rim (one merged mesh)
+    for (var bi2 = 0; bi2 < 20; bi2++) {
+      var ba = bi2 * Math.PI / 10;
+      bulbParts.push(part(new THREE.SphereGeometry(0.17, 8, 6),
+        Math.cos(ba) * R, Math.sin(ba) * R, 0.30, 0, 0, 0, 1, 1, 1));
+    }
+    var bulbMat = new THREE.MeshStandardMaterial({
+      color: 0xffe0a0, emissive: 0xffb46b, emissiveIntensity: 1.4, roughness: 0.4
+    });
+    windowMats.push(bulbMat); // bulbs glow warm at night
+    rotor.add(new THREE.Mesh(mergeGeos(bulbParts), bulbMat));
     var skp = [];
     for (var i = 0; i < 8; i++) {
       var a = i * Math.PI / 4;
@@ -2384,8 +2408,17 @@ function init(canvasId) {
     /* gondolas: one InstancedMesh; children of the rotor so they orbit yet stay upright */
     var gparts = [];
     tubePart(0, 0, 0, 0, -1.0, 0, 0.12, 0x3a3a44, gparts);                 // hanger
-    xg(new THREE.BoxGeometry(2.6, 2.6, 2.8), 0, -2.3, 0, 0, 0, 0, 0xffffff, gparts); // cabin
+    xg(new THREE.BoxGeometry(2.6, 0.18, 2.8), 0, -3.5, 0, 0, 0, 0, 0xffffff, gparts); // cabin floor
+    xg(new THREE.BoxGeometry(2.6, 1.0, 0.12), 0, -2.9, 1.34, 0, 0, 0, 0xffffff, gparts);  // low walls (open cabin)
+    xg(new THREE.BoxGeometry(2.6, 1.0, 0.12), 0, -2.9, -1.34, 0, 0, 0, 0xffffff, gparts);
+    xg(new THREE.BoxGeometry(0.12, 1.0, 2.8), 1.24, -2.9, 0, 0, 0, 0, 0xffffff, gparts);
+    xg(new THREE.BoxGeometry(0.12, 1.0, 2.8), -1.24, -2.9, 0, 0, 0, 0, 0xffffff, gparts);
+    [[1.24, 1.34], [-1.24, 1.34], [1.24, -1.34], [-1.24, -1.34]].forEach(function (cn) {
+      xg(new THREE.BoxGeometry(0.16, 2.5, 0.16), cn[0], -2.15, cn[1], 0, 0, 0, 0x8a5a30, gparts); // corner posts
+    });
     xg(new THREE.BoxGeometry(2.9, 0.2, 3.1), 0, -0.9, 0, 0, 0, 0, 0xffffff, gparts);  // roof
+    xg(new THREE.BoxGeometry(2.2, 0.18, 1.0), 0, -3.0, 0.2, 0, 0, 0, 0x8a5a30, gparts); // bench seat
+    xg(new THREE.BoxGeometry(2.2, 0.9, 0.15), 0, -2.55, -0.35, 0, 0, 0, 0x8a5a30, gparts); // bench back
     var gondMat = new THREE.MeshStandardMaterial({
       vertexColors: true, roughness: 0.6, emissive: 0xffb46b, emissiveIntensity: 0.18
     });
@@ -2529,8 +2562,8 @@ function init(canvasId) {
     var wheelR = new THREE.Mesh(bikeWheelGeo, bikeTireMat);
     wheelR.position.set(0, 0.55, -0.85); wheelR.castShadow = true; grp.add(wheelR);
     scene.add(grp);
-    registerChunk(grp, px, pz);
-    var b = { group: grp, wheelF: wheelF, wheelR: wheelR, pedal: 0, it: null };
+    var bchunk = registerChunk(grp, px, pz);
+    var b = { group: grp, wheelF: wheelF, wheelR: wheelR, pedal: 0, it: null, chunk: bchunk };
     var it = {
       x: px, z: pz, r: 3.4, label: '🚲 Ride', disabled: false,
       action: function () { rideBike(b); }
@@ -2559,6 +2592,8 @@ function init(canvasId) {
     if (ridingBike) return;
     ridingBike = b; b.it.disabled = true;
     speedMult = 1.8;
+    if (b.chunk) b.chunk.noLOD = true; // keep the bike visible while riding (chunk stays at parked spot)
+    b.group.visible = true;
     scene.remove(b.group);
     playerRig.group.add(b.group);      // bike follows the player
     b.group.position.set(0, 0.02, -0.30); // saddle under the hips
@@ -2578,6 +2613,7 @@ function init(canvasId) {
     scene.add(b.group);
     b.group.position.set(wx, wy, wz);
     b.group.rotation.set(0, yaw, 0);
+    if (b.chunk) { b.chunk.noLOD = false; b.chunk.cx = wx; b.chunk.cz = wz; } // resume LOD at the parked spot
     b.it.disabled = false; b.it.x = wx; b.it.z = wz; // prompt follows the parked bike
     promptLocked = false;
     hidePrompt();
@@ -2589,6 +2625,9 @@ function init(canvasId) {
       var s = Math.sin(b.pedal); // legs pedal in circles
       c.hipL.rotation.x = lerp(c.hipL.rotation.x, -0.95 + s * 0.45, k);
       c.hipR.rotation.x = lerp(c.hipR.rotation.x, -0.95 - s * 0.45, k);
+      var flexL = 0.95 - s * 0.45, flexR = 0.95 + s * 0.45; // hip flexion 0.5..1.4
+      c.kneeL.rotation.x = lerp(c.kneeL.rotation.x, 0.25 + (flexL - 0.5) * 1.1, k); // knee follows pedal
+      c.kneeR.rotation.x = lerp(c.kneeR.rotation.x, 0.25 + (flexR - 0.5) * 1.1, k);
       var spin = speed * dt / 0.55 * (moving ? 1 : 0.15); // forward roll: top of wheel moves +z
       b.wheelF.rotation.x += spin; b.wheelR.rotation.x += spin;
     }
@@ -2644,10 +2683,10 @@ function init(canvasId) {
         var a = w.angle + w.rideIdx * Math.PI / 4;
         var lx = Math.cos(a) * WHEEL_R, ly = Math.sin(a) * WHEEL_R;
         var wy = w.baseY + WHEEL_H + ly;
-        player.position.set(w.cx - lx, wy - 3.6, w.cz);
+        player.position.set(w.cx - lx, wy - 3.41, w.cz); // feet on the cabin floor
         var hyaw = Math.atan2(-lx, 0.001); // face outward
         playerYaw = targetYaw = hyaw; player.rotation.y = hyaw;
-        applySitPose(playerRig, dt, -0.55);
+        applySitPose(playerRig, dt, -0.84); // hips on the bench seat
       }
     }
     for (var b = 0; b < boats.length; b++) { // gentle bobbing
@@ -2817,6 +2856,7 @@ function init(canvasId) {
     _camPos.copy(camera.position);
     for (var i = 0; i < lodChunks.length; i++) {
       var ch = lodChunks[i];
+      if (ch.noLOD) continue; // e.g. ridden bike: managed manually, never auto-hide
       _toObj.set(ch.cx - _camPos.x, 0, ch.cz - _camPos.z);
       var dist = _toObj.length();
       var vis = true;
@@ -2824,7 +2864,7 @@ function init(canvasId) {
       else {
         _toObj.normalize();
         var facing = _toObj.x * _camDir.x + _toObj.z * _camDir.z;
-        if (facing < -0.18) vis = false; // behind the camera (>~100 deg)
+        if (facing < -0.18 && !ch.noBehind) vis = false; // behind the camera (>~100 deg)
       }
       if (ch.obj.visible !== vis) ch.obj.visible = vis;
     }
@@ -3040,6 +3080,7 @@ function init(canvasId) {
       bikes: bikes,
       boats: boats,
       docks: [DOCK_A, DOCK_B],
+      campfire: function () { return { x: campfirePos.x, z: campfirePos.z }; },
       isRiding: function () { return !!(ridingWheel || ridingBike); },
       isSitting: function () { return !!sitting; },
       isPartnerSitting: function () { return !!(partnerSit && partnerSit.seated); },
