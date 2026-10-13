@@ -2990,20 +2990,45 @@ function init(canvasId, opts) {
   var poleWoodMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 });
   var wireMat = new THREE.MeshStandardMaterial({ color: 0x232326, roughness: 0.85 });
   function buildPowerLines() {
-    var runs = [
-      [[-84, -6], [-76, -14], [-68, -20]],
-      [[-84, -6], [-96, -8], [-104, -14]],
-      [[84, -6], [76, -14], [68, -20]],
-      [[84, -6], [96, -8], [104, -14]]
-    ];
+    /* poles behind each building, strung around the island outskirts (never in the central walking area) */
+    var polePts = []; // {x, z, cx}  cx = island center x
+    [0, 1].forEach(function (side) {
+      var ccx = side ? ISL_B.cx : ISL_A.cx;
+      BUILD_PLOTS_A.forEach(function (p) {
+        var bx = side ? -p.x : p.x, bz = p.z;
+        var dx = bx - ccx, dz = bz; // back direction: away from the island center (doors face the center)
+        var dl = Math.hypot(dx, dz) || 1; dx /= dl; dz /= dl;
+        [[12, -3], [19, 3]].forEach(function (off) {
+          var px = bx + dx * off[0] - dz * off[1];
+          var pz = bz + dz * off[0] + dx * off[1];
+          for (var k = 0; k < 24 && groundHeight(px, pz) < 2; k++) { px -= dx * 1.5; pz -= dz * 1.5; } // stay on land
+          polePts.push({ x: px, z: pz, cx: ccx });
+        });
+      });
+    });
+    /* order poles around each island by angle; wire consecutive poles, skipping bridge crossings */
+    var runs = [];
+    [ISL_A.cx, ISL_B.cx].forEach(function (ccx) {
+      var pts = polePts.filter(function (q) { return q.cx === ccx; });
+      pts.sort(function (a, b) { return Math.atan2(a.z, a.x - ccx) - Math.atan2(b.z, b.x - ccx); });
+      var run = [];
+      for (var i = 0; i < pts.length; i++) {
+        var nx = pts[(i + 1) % pts.length];
+        var mx = (pts[i].x + nx.x) / 2, mz = (pts[i].z + nx.z) / 2;
+        run.push([pts[i].x, pts[i].z]);
+        if (Math.abs(mz) < 12 && Math.abs(mx) < 78) { if (run.length > 1) runs.push(run); run = []; } // bridge corridor: break the ring
+      }
+      if (run.length > 1) runs.push(run);
+    });
     var seen = {}, poleList = [];
     runs.forEach(function (run) {
       run.forEach(function (pt) {
-        var k = pt[0] + ',' + pt[1];
+        var k = pt[0].toFixed(1) + ',' + pt[1].toFixed(1);
         if (!seen[k]) { seen[k] = true; poleList.push(pt); }
       });
     });
     var poleGeos = [], wireGeos = [], topAt = {}, ARM_Y = 7.4;
+    function key(pt) { return pt[0].toFixed(1) + ',' + pt[1].toFixed(1); }
     poleList.forEach(function (pt) {
       var gy = groundHeight(pt[0], pt[1]);
       poleGeos.push(part(GEO.cyl, pt[0], gy + 2.1, pt[1], 0, 0, 0, 0.62, 4.2, 0.62, [1, 1])); // tapered pole
@@ -3011,12 +3036,13 @@ function init(canvasId, opts) {
       poleGeos.push(part(GEO.box, pt[0], gy + ARM_Y, pt[1], 0, 0, 0, 2.6, 0.18, 0.18, [1, 1])); // crossarm
       poleGeos.push(part(GEO.cyl, pt[0] - 1.1, gy + ARM_Y + 0.2, pt[1], 0, 0, 0, 0.16, 0.32, 0.16, [1, 1])); // insulators
       poleGeos.push(part(GEO.cyl, pt[0] + 1.1, gy + ARM_Y + 0.2, pt[1], 0, 0, 0, 0.16, 0.32, 0.16, [1, 1]));
-      topAt[pt[0] + ',' + pt[1]] = [[pt[0] - 1.1, gy + ARM_Y + 0.36, pt[1]], [pt[0] + 1.1, gy + ARM_Y + 0.36, pt[1]]];
+      topAt[key(pt)] = [[pt[0] - 1.1, gy + ARM_Y + 0.36, pt[1]], [pt[0] + 1.1, gy + ARM_Y + 0.36, pt[1]]];
       colliders.push({ x: pt[0], z: pt[1], r: 0.7 }); // solid pole
     });
     runs.forEach(function (run) {
       for (var i = 0; i < run.length - 1; i++) {
-        var t0 = topAt[run[i][0] + ',' + run[i][1]], t1 = topAt[run[i + 1][0] + ',' + run[i + 1][1]];
+        var t0 = topAt[key(run[i])], t1 = topAt[key(run[i + 1])];
+        if (!t0 || !t1) continue;
         for (var w = 0; w < 2; w++) {
           var p0 = t0[w], p1 = t1[w];
           var sag = Math.hypot(p1[0] - p0[0], p1[2] - p0[2]) * 0.055;
@@ -3036,6 +3062,46 @@ function init(canvasId, opts) {
     if (wireGeos.length) registerChunk(new THREE.Mesh(mergeGeos(wireGeos), wireMat), 0, -12);
   }
 
+  /* ---------------- homely street lamps (glow at night) ---------------- */
+  var lampMetalMat = new THREE.MeshStandardMaterial({ color: 0x2e3138, roughness: 0.7, metalness: 0.35 });
+  var lampHeadMat = new THREE.MeshStandardMaterial({
+    color: 0xffe0a0, emissive: 0xffc98a, emissiveIntensity: 0.9, roughness: 0.4
+  });
+  function buildStreetLamps() {
+    var spots = [
+      [-90, 10], [-80, 0], [-100, 2], [-90, -16], [-70, -10],
+      [90, 10], [80, 0], [100, 2], [90, -16], [70, -10]
+    ];
+    var lampGeos = [], headGeos = [];
+    spots.forEach(function (pt) {
+      var gy = groundHeight(pt[0], pt[1]);
+      lampGeos.push(part(GEO.cyl, pt[0], gy + 2.75, pt[1], 0, 0, 0, 0.28, 5.5, 0.28, [1, 1])); // post
+      lampGeos.push(part(GEO.box, pt[0] + 0.7, gy + 5.4, pt[1], 0, 0, 0, 1.6, 0.14, 0.14, [1, 1])); // arm
+      headGeos.push(part(GEO.sph, pt[0] + 1.4, gy + 5.15, pt[1], 0, 0, 0, 0.34, 0.34, 0.34, [1, 1])); // lamp head
+      headGeos.push(part(GEO.cyl, pt[0] + 1.4, gy + 5.42, pt[1], 0, 0, 0, 0.5, 0.1, 0.5, [1, 1])); // cap
+      var sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: glowTex, color: 0xffc98a, transparent: true, opacity: 0.0,
+        blending: THREE.AdditiveBlending, depthWrite: false
+      }));
+      sp.scale.set(4.5, 4.5, 1);
+      sp.position.set(pt[0] + 1.4, gy + 5.15, pt[1]);
+      scene.add(sp);
+      lanternSprites.push(sp); // fades in at night via the existing driver
+      colliders.push({ x: pt[0], z: pt[1], r: 0.45 }); // solid post
+    });
+    windowMats.push(lampHeadMat); // lamp heads glow at night
+    if (lampGeos.length) {
+      var lampMesh = new THREE.Mesh(mergeGeos(lampGeos), lampMetalMat);
+      lampMesh.castShadow = true;
+      registerChunk(lampMesh, 0, 0);
+    }
+    if (headGeos.length) registerChunk(new THREE.Mesh(mergeGeos(headGeos), lampHeadMat), 0, 0);
+  }
+
+  /* weather state (declared before the builders run) */
+  var weatherMode = 'clear'; // 'clear' | 'rain' | 'snow'
+  var rainLines = null, snowPts = null, weatherDim = 0; // weatherDim lerps 0..1 while precipitating
+
   /* build all Phase 4 objects (mirrored across islands) */
   pierRects.length = 0; // reset on re-init (module-level walk list)
   buildSkyWheel(WHEEL_A, 0.6);
@@ -3044,7 +3110,9 @@ function init(canvasId, opts) {
   buildDock(DOCK_B, 77);
   buildCycleStand(STAND_A, 0);
   buildCycleStand(STAND_B, 1);
-  buildPowerLines(); // homely utility poles + sagging wires
+  buildPowerLines(); // homely utility poles + sagging wires (outskirts, behind buildings)
+  buildStreetLamps(); // warm street lamps around the plazas
+  buildWeather(); // rain + snow particle systems (hidden until the settings pick them)
 
   /* ---------------- input: keys + touch joystick + mouse orbit ---------- */
   var keys = {};
@@ -3194,8 +3262,8 @@ function init(canvasId, opts) {
     waterUniforms.sunDir.value.copy(sd);
     sun.position.copy(sd).multiplyScalar(220).add(new THREE.Vector3(0, 0, 0));
     sun.target.position.set(0, 0, 0);
-    sun.color.copy(cur.sunC); sun.intensity = cur.sunI * 1.35;
-    hemi.intensity = cur.hemiI; amb.intensity = cur.ambI;
+    sun.color.copy(cur.sunC); sun.intensity = cur.sunI * 1.35 * (1 - weatherDim * 0.45); // overcast dims the sun
+    hemi.intensity = cur.hemiI * (1 - weatherDim * 0.25); amb.intensity = cur.ambI;
     renderer.toneMappingExposure = lerp(1.08, 0.85, night);
 
     /* lanterns / fire / fireflies come alive at night */
@@ -3383,6 +3451,87 @@ function init(canvasId, opts) {
   /* ---------------- main loop ---------------- */
   var clock = new THREE.Clock();
   var rafId = 0, frame = 0, destroyed = false;
+  /* ---------------- weather: rain + snow (settings override) ---------------- */
+  function buildWeather() {
+    var i, pos, g;
+    /* rain: short vertical streaks (LineSegments) */
+    var RN = 700;
+    pos = new Float32Array(RN * 6);
+    var rvel = new Float32Array(RN);
+    for (i = 0; i < RN; i++) {
+      var rx = (Math.random() - 0.5) * 70, ry = Math.random() * 28, rz = (Math.random() - 0.5) * 70;
+      pos[i * 6] = rx; pos[i * 6 + 1] = ry; pos[i * 6 + 2] = rz;
+      pos[i * 6 + 3] = rx; pos[i * 6 + 4] = ry - 0.9; pos[i * 6 + 5] = rz;
+      rvel[i] = 24 + Math.random() * 10;
+    }
+    g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    rainLines = new THREE.LineSegments(g, new THREE.LineBasicMaterial({
+      color: 0x9fb8d8, transparent: true, opacity: 0.55
+    }));
+    rainLines.visible = false; rainLines.frustumCulled = false;
+    rainLines.userData = { vel: rvel, n: RN };
+    scene.add(rainLines);
+    /* snow: soft drifting flakes (Points) */
+    var SN = 600;
+    pos = new Float32Array(SN * 3);
+    var svel = new Float32Array(SN), sph = new Float32Array(SN);
+    for (i = 0; i < SN; i++) {
+      pos[i * 3] = (Math.random() - 0.5) * 70;
+      pos[i * 3 + 1] = Math.random() * 28;
+      pos[i * 3 + 2] = (Math.random() - 0.5) * 70;
+      svel[i] = 1.6 + Math.random() * 1.8; sph[i] = Math.random() * Math.PI * 2;
+    }
+    g = new THREE.BufferGeometry();
+    g.setAttribute('position', new THREE.BufferAttribute(pos, 3));
+    snowPts = new THREE.Points(g, new THREE.PointsMaterial({
+      color: 0xffffff, size: 0.32, transparent: true, opacity: 0.9, sizeAttenuation: true
+    }));
+    snowPts.visible = false; snowPts.frustumCulled = false;
+    snowPts.userData = { vel: svel, ph: sph, n: SN };
+    scene.add(snowPts);
+  }
+  function updateWeather(dt, t) {
+    var wantDim = weatherMode === 'clear' ? 0 : 1;
+    weatherDim = lerp(weatherDim, wantDim, 1 - Math.exp(-dt * 1.2));
+    if (weatherDim > 0.02) { // overcast mood: pull the fog in, dim the sun
+      scene.fog.near = lerp(130, 70, weatherDim);
+      scene.fog.far = lerp(420, 240, weatherDim);
+    } else { scene.fog.near = 130; scene.fog.far = 420; }
+    var cx = camera.position.x, cz = camera.position.z, i, p, u;
+    if (rainLines.visible) {
+      p = rainLines.geometry.attributes.position; u = rainLines.userData;
+      for (i = 0; i < u.n; i++) {
+        var ny = p.getY(i * 2) - u.vel[i] * dt;
+        if (ny < 0) {
+          ny = 24 + Math.random() * 6;
+          var nx = cx + (Math.random() - 0.5) * 70, nz = cz + (Math.random() - 0.5) * 70;
+          p.setXYZ(i * 2, nx, ny, nz); p.setXYZ(i * 2 + 1, nx, ny - 0.9, nz);
+        } else { p.setY(i * 2, ny); p.setY(i * 2 + 1, ny - 0.9); }
+      }
+      p.needsUpdate = true;
+    }
+    if (snowPts.visible) {
+      p = snowPts.geometry.attributes.position; u = snowPts.userData;
+      for (i = 0; i < u.n; i++) {
+        var sy = p.getY(i) - u.vel[i] * dt;
+        var sx = p.getX(i) + Math.sin(t * 1.4 + u.ph[i]) * dt * 1.2;
+        if (sy < 0) {
+          sy = 24 + Math.random() * 6;
+          sx = cx + (Math.random() - 0.5) * 70;
+          p.setZ(i, cz + (Math.random() - 0.5) * 70);
+        }
+        p.setY(i, sy); p.setX(i, sx);
+      }
+      p.needsUpdate = true;
+    }
+  }
+  function setWeather(mode) {
+    weatherMode = (mode === 'rain' || mode === 'snow') ? mode : 'clear';
+    if (rainLines) rainLines.visible = weatherMode === 'rain';
+    if (snowPts) snowPts.visible = weatherMode === 'snow';
+  }
+
   function animate() {
     if (destroyed) return;
     rafId = requestAnimationFrame(animate);
@@ -3397,6 +3546,7 @@ function init(canvasId, opts) {
     updatePhase4(dt, t); // Phase 4: sky wheels, boats, campfire warmth
     updateCamera(dt);
     updateDayNight(dt, t);
+    updateWeather(dt, t); // settings: rain / snow particles + overcast mood
     updateAmbient(dt, t);
     updatePhase2(dt, t); // Phase 2: smoke, prompts, interior cutaway, TV
     if ((frame++ % 3) === 0) updateLOD();
@@ -3427,6 +3577,8 @@ function init(canvasId, opts) {
 
   return {
     setTimeOfDay: function (h) { manualHour = (h === null || h === undefined) ? null : ((h % 24) + 24) % 24; },
+    setWeather: setWeather, // 'clear' | 'rain' | 'snow'
+    getWeather: function () { return weatherMode; },
     getPlayerPos: function () { return { x: player.position.x, y: player.position.y, z: player.position.z }; },
     getPartnerPos: function () { return { x: partner.position.x, y: partner.position.y, z: partner.position.z }; },
     getRole: function () { return myRole; },

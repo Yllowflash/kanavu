@@ -43,6 +43,16 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
 #loading{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(26,14,18,.85);color:#f5d9a8;font-size:18px;letter-spacing:.2em}
 #loading.visible{display:flex}
 #sound-btn{position:fixed;top:14px;left:14px;z-index:50;display:none;width:44px;height:44px;border-radius:50%;border:1px solid rgba(245,200,110,.4);background:rgba(26,14,18,.65);color:#f5d9a8;font-size:19px;cursor:pointer;backdrop-filter:blur(6px)}
+#set-btn{position:fixed;top:14px;left:66px;z-index:50;display:none;width:44px;height:44px;border-radius:50%;border:1px solid rgba(245,200,110,.4);background:rgba(26,14,18,.65);color:#f5d9a8;font-size:19px;cursor:pointer;backdrop-filter:blur(6px)}
+#set-panel{position:fixed;z-index:60;top:50%;left:50%;transform:translate(-50%,-50%);width:min(340px,88vw);max-height:82vh;overflow-y:auto;background:rgba(30,16,22,.96);border:1px solid rgba(245,200,110,.35);border-radius:18px;padding:20px;color:#f4e8d8;display:none;backdrop-filter:blur(10px)}
+#set-panel.visible{display:block}
+#set-panel h3{margin:0 0 14px;text-align:center;letter-spacing:.15em;color:#ffe9b8;font-size:16px}
+.set-row{display:flex;align-items:center;justify-content:space-between;margin:10px 0;gap:8px}
+.set-lbl{font-size:14px;color:rgba(244,232,216,.85);min-width:70px}
+.set-opts{display:flex;gap:6px;flex-wrap:wrap;justify-content:flex-end}
+.set-opt{border:1px solid rgba(245,200,110,.35);background:rgba(60,30,40,.5);color:#f4e8d8;border-radius:12px;padding:7px 10px;font-size:13px;cursor:pointer}
+.set-opt.sel{background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;border:none;font-weight:bold}
+#set-close{width:100%;margin-top:12px}
 </style>
 </head>
 <body>
@@ -91,10 +101,38 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
   <canvas id="world-canvas"></canvas>
 </div>
 <button id="sound-btn" title="sound on/off">♪</button>
+<button id="set-btn" title="settings">⚙️</button>
+<div id="set-panel">
+  <h3>SETTINGS</h3>
+  <div class="set-row">
+    <span class="set-lbl">🕐 Time</span>
+    <div class="set-opts" id="set-time">
+      <button class="set-opt sel" data-v="auto">Auto</button>
+      <button class="set-opt" data-v="morning">🌅 Morning</button>
+      <button class="set-opt" data-v="night">🌙 Night</button>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-lbl">🌦️ Weather</span>
+    <div class="set-opts" id="set-weather">
+      <button class="set-opt sel" data-v="clear">☀️ Clear</button>
+      <button class="set-opt" data-v="rain">🌧️ Rain</button>
+      <button class="set-opt" data-v="snow">❄️ Snow</button>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-lbl">🔊 Sound</span>
+    <div class="set-opts" id="set-sound">
+      <button class="set-opt sel" data-v="on">On</button>
+      <button class="set-opt" data-v="off">Off</button>
+    </div>
+  </div>
+  <button class="btn" id="set-close">Close ✕</button>
+</div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="kanavu-world.js?v=7"></script>
+<script src="kanavu-world.js?v=8"></script>
 <script src="kanavu-multiplayer.js?v=2"></script>
 <script src="kanavu-music.js?v=2"></script>
 <script src="kanavu-ambience.js?v=1"></script>
@@ -294,6 +332,7 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
         gameScreen.classList.add('visible');
         loading.classList.remove('visible');
         soundBtn.style.display = 'block';
+        $('set-btn').style.display = 'block';
         try {
           if (window.KanavuMusic) KanavuMusic.start();
           if (window.KanavuAmbience) KanavuAmbience.start();
@@ -316,6 +355,33 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
     } catch(e){}
     soundBtn.textContent = soundOn ? '♪' : '✕';
     soundBtn.style.opacity = soundOn ? '1' : '.45';
+  });
+
+  /* ---------- settings panel (time + weather + sound) ---------- */
+  var setPanel = $('set-panel');
+  $('set-btn').addEventListener('click', function(){ setPanel.classList.add('visible'); });
+  $('set-close').addEventListener('click', function(){ setPanel.classList.remove('visible'); });
+  function setOptSel(groupId, v) {
+    var btns = $(groupId).querySelectorAll('.set-opt');
+    for (var i = 0; i < btns.length; i++) btns[i].classList.toggle('sel', btns[i].getAttribute('data-v') === v);
+  }
+  $('set-time').addEventListener('click', function(e){
+    var b = e.target.closest('.set-opt'); if (!b || !worldApi) return;
+    var v = b.getAttribute('data-v');
+    setOptSel('set-time', v);
+    try { worldApi.setTimeOfDay(v === 'morning' ? 8 : v === 'night' ? 0 : null); } catch(err){}
+  });
+  $('set-weather').addEventListener('click', function(e){
+    var b = e.target.closest('.set-opt'); if (!b || !worldApi) return;
+    var v = b.getAttribute('data-v');
+    setOptSel('set-weather', v);
+    try { worldApi.setWeather(v); } catch(err){}
+  });
+  $('set-sound').addEventListener('click', function(e){
+    var b = e.target.closest('.set-opt'); if (!b) return;
+    var v = b.getAttribute('data-v');
+    setOptSel('set-sound', v);
+    if ((v === 'off') === soundOn) soundBtn.click();
   });
 })();
 </script>
