@@ -205,8 +205,12 @@ function createGlowTexture(inner, outer) {
   return tex;
 }
 
-function init(canvasId) {
+function init(canvasId, opts) {
   if (typeof THREE === 'undefined') throw new Error('Three.js r160 required');
+  opts = opts || {};
+  var myRole = opts.role === 'girl' ? 'girl' : 'boy'; // which character the local player is
+  var myName = opts.playerName || (myRole === 'girl' ? 'Tara' : 'You');
+  var partnerName = opts.partnerName || (myRole === 'girl' ? 'Adi' : 'Tara');
   var canvas = typeof canvasId === 'string' ? document.getElementById(canvasId) : canvasId;
 
   var renderer = new THREE.WebGLRenderer({ canvas: canvas, antialias: true });
@@ -1294,7 +1298,11 @@ function init(canvasId) {
     interactables.push({
       x: b.x + b.fx * promptD, z: b.z + b.fz * promptD, r: 5,
       label: spec.icon + ' Enter ' + spec.name,
-      action: function () { enterInterior(b); }
+      action: function () {
+        if (b.type === 'theatre' && window.KanavuSocial && window.KanavuSocial.openTheatre) {
+          window.KanavuSocial.openTheatre();
+        } else enterInterior(b);
+      }
     });
   }
 
@@ -1562,6 +1570,7 @@ function init(canvasId) {
     var room = { cx: cx, cz: cz, lampLight: lampLight };
     rooms.push(room);
     interiorZones.push({ x0: cx - RW / 2, x1: cx + RW / 2, z0: cz - RD / 2, z1: cz + RD / 2, y: 0.02, room: room });
+    b.roomObj = g; // for interior isolation (hide the outside world while inside)
     registerChunk(g, cx, cz);
   }
 
@@ -1617,21 +1626,28 @@ function init(canvasId) {
     if (cb) setTimeout(cb, dur * 1000 + 60);
   }
   function fadeTeleport(cb) { fadeTo(true, 0.22, function () { cb(); fadeTo(false, 0.35); }); }
+  var insideRoomObj = null; // set while inside a building: exterior chunks stay hidden
   function enterInterior(b) {
     hidePrompt();
+    movementLocked = true; // no walking during the fade (smooth, no glitch)
     fadeTeleport(function () {
       player.position.set(b.ix, 0.2, b.iz + 3.0);
       playerYaw = targetYaw = Math.PI; player.rotation.y = Math.PI;
       orbit.yaw = Math.PI;
+      insideRoomObj = b.roomObj || null;
+      movementLocked = false;
     });
   }
   function exitInterior(b) {
     hidePrompt();
+    movementLocked = true;
     fadeTeleport(function () {
       player.position.set(b.door.x + b.fx * 3.2, b.gy + 0.6, b.door.z + b.fz * 3.2);
       var yw = Math.atan2(b.fx, b.fz);
       playerYaw = targetYaw = yw; player.rotation.y = yw;
       orbit.yaw = yw;
+      insideRoomObj = null;
+      movementLocked = false;
     });
   }
 
@@ -2023,40 +2039,47 @@ function init(canvasId) {
     return {
       group: group, rig: rig, torso: torso, headG: headG, eyeG: eyeG,
       shL: shL, shR: shR, hipL: legL.hip, hipR: legR.hip, kneeL: legL.knee, kneeR: legR.knee,
-      phase: 0, blinkT: 2 + Math.random() * 2.5, blinkCd: 0, blinked: false, lean: 0
+      phase: 0, blinkT: 2 + Math.random() * 2.5, blinkCd: 0, blinked: false, lean: 0,
+      emote: null // {name, t, dur} — social emote override
     };
   }
 
-  /* ---- player = the BOY ---- */
-  var playerRig = buildCharacter({
-    name: 'You', girl: false, sweater: CHMAT.boySw, pants: CHMAT.boyPn,
+  /* ---- player + partner rigs (role decides which is local) ----
+     One character per island at start: the boy on island A, the girl on B. */
+  var boyRig = buildCharacter({
+    name: myRole === 'boy' ? myName : partnerName, girl: false,
+    sweater: CHMAT.boySw, pants: CHMAT.boyPn,
     torsoGeo: CHGEO.boyTorso, trimGeo: CHGEO.boyHem, trimMat: CHMAT.boyHem,
     hairGeo: CHGEO.boyHair, hairMat: CHMAT.hair, legLowMat: CHMAT.boySh
   });
-  var player = playerRig.group;
-  /* ---- partner = the GIRL (Tara) ---- */
-  var partnerRig = buildCharacter({
-    name: 'Tara', girl: true, sweater: CHMAT.grlSw, pants: CHMAT.grlPn,
+  var girlRig = buildCharacter({
+    name: myRole === 'girl' ? myName : partnerName, girl: true,
+    sweater: CHMAT.grlSw, pants: CHMAT.grlPn,
     torsoGeo: CHGEO.grlTorso, trimGeo: CHGEO.grlCables, trimMat: CHMAT.grlCb,
     hairGeo: CHGEO.grlCap, hairGeo2: CHGEO.grlBraid, hairMat: CHMAT.hairG,
     beadGeo: CHGEO.grlBead,
-    legLowGeo: CHGEO.boot, legLowMat: CHMAT.grlBt
+    legLowMat: CHMAT.grlBt
   });
+  var playerRig = myRole === 'girl' ? girlRig : boyRig;
+  var partnerRig = myRole === 'girl' ? boyRig : girlRig;
+  var player = playerRig.group;
   var partner = partnerRig.group;
-  var startX = ISL_A.cx + 32, startZ = 12;
+  var startX = ISL_A.cx + 32, startZ = 12; // boy's island start (final placement after porches resolve)
   player.position.set(startX, groundHeight(startX, startZ), startZ);
-  var pStartX = startX + 3.2, pStartZ = startZ + 2.6;
-  partner.position.set(pStartX, groundHeight(pStartX, pStartZ), pStartZ);
+  partner.position.set(startX + 3.2, groundHeight(startX + 3.2, startZ + 2.6), startZ + 2.6);
   scene.add(player); scene.add(partner);
   var playerYaw = 0, targetYaw = 0, partnerYaw = 0;
   var playerMovingState = false; // Phase 5: tracked for network sync
-  partnerYaw = Math.atan2(startX - pStartX, startZ - pStartZ);
-  partner.rotation.y = partnerYaw;
 
   /* ---- walk / idle animation shared by player + partner ----
      Stride is matched to travel speed (stride 1.6u): no foot sliding. */
   function updateCharacterAnim(c, dt, t, moving, speed) {
     var k = 1 - Math.exp(-dt * 10);
+    if (c.emote) { // social emote override (wave, bow, laugh, cheer, shy, loveyou)
+      c.emote.t += dt;
+      if (c.emote.t >= c.emote.dur) { c.emote = null; }
+      else { applyEmotePose(c, c.emote.name, c.emote.t, c.emote.dur); return; }
+    }
     if (moving) {
       var w = Math.PI * speed / 1.6; // full leg cycle per 2 steps
       c.phase += w * dt;
@@ -2093,6 +2116,33 @@ function init(canvasId) {
     else c.eyeG.scale.y = 1;
   }
 
+  /* ---- gift visual: floating gift above the partner's head ---- */
+  var giftSprite = null, giftTimer = 0;
+  function showGift(emoji) {
+    hideGift();
+    var c = document.createElement('canvas'); c.width = c.height = 128;
+    var g = c.getContext('2d');
+    g.font = '92px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText(emoji || '🎁', 64, 70);
+    var tex = new THREE.CanvasTexture(c);
+    giftSprite = new THREE.Sprite(new THREE.SpriteMaterial({ map: tex, transparent: true, depthWrite: false }));
+    giftSprite.scale.set(1.6, 1.6, 1);
+    scene.add(giftSprite);
+    giftTimer = 6;
+    spawnHearts(partner.position.x, partner.position.y + 3.4, partner.position.z, 5);
+  }
+  function hideGift() {
+    if (giftSprite) { scene.remove(giftSprite); giftSprite.material.map.dispose(); giftSprite.material.dispose(); giftSprite = null; }
+    giftTimer = 0;
+  }
+  function updateGift(dt, t) {
+    if (!giftSprite) return;
+    giftTimer -= dt;
+    if (giftTimer <= 0) { hideGift(); return; }
+    giftSprite.position.set(partner.position.x, partner.position.y + 3.9 + Math.sin(t * 2.4) * 0.18, partner.position.z);
+    giftSprite.material.opacity = Math.min(1, giftTimer / 1.2);
+  }
+
   /* ---------------- partner (Tara) AI ---------------- */
   var partnerOnline = true, partnerSeeking = true;
   /* Phase 5 multiplayer: when partnerRemote is true, the partner rig is driven
@@ -2116,17 +2166,32 @@ function init(canvasId) {
   }
   var porchB = (function () { // her island's Couple's House porch (offline spot)
     for (var i = 0; i < BUILDINGS.length; i++) {
-      var b = BUILDINGS[i];
-      if (b.side === 'B' && b.type === 'house') {
-        var sp = BTYPES[b.type];
-        return { x: b.x + b.fx * (sp.d / 2 + 1.8), z: b.z + b.fz * (sp.d / 2 + 1.8) };
-      }
+      var b = BUILDINGS[i]; if (b.side === 'B' && b.type === 'house') return porchOf(b);
     }
     return { x: ISL_B.cx + 32, z: 12 };
   })();
+  var porchA = (function () { // his island's Couple's House porch
+    for (var i = 0; i < BUILDINGS.length; i++) {
+      var b = BUILDINGS[i]; if (b.side === 'A' && b.type === 'house') return porchOf(b);
+    }
+    return { x: ISL_A.cx + 32, z: 12 };
+  })();
+  function porchOf(b) {
+    var sp = BTYPES[b.type];
+    return { x: b.x + b.fx * (sp.d / 2 + 1.8), z: b.z + b.fz * (sp.d / 2 + 1.8) };
+  }
+  var partnerHome = myRole === 'girl' ? porchA : porchB; // partner idles on their own island
+  var partnerWanderT = 0, partnerWanderX = partnerHome.x, partnerWanderZ = partnerHome.z;
+  (function placeRoles() { // one character per island at game start
+    var bx = ISL_A.cx + 32, bz = 12, gy;
+    boyRig.group.position.set(bx, groundHeight(bx, bz), bz);
+    gy = groundHeight(porchB.x, porchB.z);
+    girlRig.group.position.set(porchB.x, gy > -900 ? gy : 2, porchB.z);
+    if (myRole === 'girl') { playerYaw = targetYaw = Math.PI; player.rotation.y = Math.PI; }
+    partnerYaw = 0; partner.rotation.y = 0;
+  })();
   function setPartnerOnline(b) {
-    partnerOnline = !!b;
-    partnerSeeking = true;
+    partnerOnline = !!b; // AI idles at home; no auto-follow (one character per island)
   }
   function updatePartner(dt, t) {
     var pp = partner.position;
@@ -2174,30 +2239,18 @@ function init(canvasId) {
       }
       return;
     }
-    var tx0 = partnerOnline ? player.position.x : porchB.x;
-    var tz0 = partnerOnline ? player.position.z : porchB.z;
-    /* route across the hanging bridge (z ~= 0, x in [-50, 50]) when target is
-       on the other island; straight-line walk would hit water otherwise */
-    var tx = tx0, tz = tz0;
-    var cross = (pp.x < -5 && tx0 > 5) || (pp.x > 5 && tx0 < -5);
-    if (cross) {
-      var fromB = pp.x > 5;
-      var nmx = fromB ? 46 : -46, fmx = fromB ? -46 : 46;
-      var onBr = Math.abs(pp.z) < 5 && pp.x > -50 && pp.x < 50;
-      var atNear = Math.hypot(pp.x - nmx, pp.z) < 7;
-      if (onBr || atNear) { tx = fmx; tz = 0; }
-      else { tx = nmx; tz = 0; }
-      if (Math.hypot(pp.x - fmx, pp.z) < 9) { tx = tx0; tz = tz0; }
+    /* partner idles on their own island: gentle wandering near home, never follows */
+    if (!partnerWanderT || t > partnerWanderT) {
+      partnerWanderT = t + 4 + Math.random() * 6;
+      var wa = Math.random() * Math.PI * 2, wr = 1 + Math.random() * 3.2;
+      partnerWanderX = partnerHome.x + Math.cos(wa) * wr;
+      partnerWanderZ = partnerHome.z + Math.sin(wa) * wr;
     }
-    var dx = tx - pp.x, dz = tz - pp.z;
+    var dx = partnerWanderX - pp.x, dz = partnerWanderZ - pp.z;
     var d = Math.hypot(dx, dz);
-    var stopR = partnerOnline ? 2.5 : 1.2, goR = partnerOnline ? 4 : 1.6;
-    if (partnerSeeking && d < stopR) partnerSeeking = false;
-    else if (!partnerSeeking && d > goR) partnerSeeking = true;
     var moving = false;
-    if (partnerSeeking && d > 0.05) {
-      var sp = partnerOnline ? 10.2 : 7;
-      var st = stepMover(pp.x, pp.z, dx / d, dz / d, sp, dt);
+    if (d > 0.6) {
+      var st = stepMover(pp.x, pp.z, dx / d, dz / d, 3.2, dt); // slow amble
       pp.x = st.x; pp.z = st.z; moving = st.moved;
       if (st.moved) { // smooth yaw toward travel direction
         var ty = Math.atan2(dx / d, dz / d), dy2 = ty - partnerYaw;
@@ -2209,7 +2262,7 @@ function init(canvasId) {
     }
     var gy = walkHeight(pp.x, pp.z);
     if (gy > -900) pp.y = lerp(pp.y, gy, 1 - Math.exp(-dt * 10));
-    updateCharacterAnim(partnerRig, dt, t, moving, 10.2);
+    updateCharacterAnim(partnerRig, dt, t, moving, 3.2); // gentle amble
   }
   /* ================= PHASE 4: interactive objects =================
      Sky wheels (rideable), docks + rowboats, rideable bicycles,
@@ -2757,17 +2810,44 @@ function init(canvasId) {
     base.addEventListener('pointercancel', end);
   }
 
+  var camPointers = new Map(); // pointerId -> {x, y} (pinch zoom)
+  var pinchD0 = 0;
   function onCanvasDown(e) {
     if (e.target !== canvas) return;
-    orbit.dragging = true; orbit.lx = e.clientX; orbit.ly = e.clientY;
+    try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
+    camPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (camPointers.size === 2) { // start pinch: stop single-finger orbit
+      var p = Array.from(camPointers.values());
+      pinchD0 = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      orbit.dragging = false;
+    } else if (camPointers.size === 1) {
+      orbit.dragging = true; orbit.lx = e.clientX; orbit.ly = e.clientY;
+    }
   }
   function onCanvasMove(e) {
+    if (!camPointers.has(e.pointerId)) return;
+    camPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    if (camPointers.size === 2) { // pinch zoom in/out
+      var p = Array.from(camPointers.values());
+      var d = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
+      if (pinchD0 > 0 && d > 0) orbit.dist = clamp(orbit.dist * (pinchD0 / d), 13, 48);
+      pinchD0 = d;
+      return;
+    }
     if (!orbit.dragging) return;
     orbit.yaw -= (e.clientX - orbit.lx) * 0.0052;
     orbit.pitch = clamp(orbit.pitch + (e.clientY - orbit.ly) * 0.004, 0.14, 1.15);
     orbit.lx = e.clientX; orbit.ly = e.clientY;
   }
-  function onCanvasUp() { orbit.dragging = false; }
+  function onCanvasUp(e) {
+    camPointers.delete(e.pointerId);
+    if (camPointers.size < 2) pinchD0 = 0;
+    if (camPointers.size === 0) orbit.dragging = false;
+    else if (camPointers.size === 1) {
+      var p = Array.from(camPointers.values())[0];
+      orbit.dragging = true; orbit.lx = p.x; orbit.ly = p.y;
+    }
+  }
   function onWheel(e) {
     orbit.dist = clamp(orbit.dist * (1 + e.deltaY * 0.001), 13, 48);
     e.preventDefault();
@@ -2860,7 +2940,8 @@ function init(canvasId) {
       _toObj.set(ch.cx - _camPos.x, 0, ch.cz - _camPos.z);
       var dist = _toObj.length();
       var vis = true;
-      if (dist > LOD_DIST) vis = false;
+      if (insideRoomObj) vis = (ch.obj === insideRoomObj); // inside: only the room shows
+      else if (dist > LOD_DIST) vis = false;
       else {
         _toObj.normalize();
         var facing = _toObj.x * _camDir.x + _toObj.z * _camDir.z;
@@ -2927,7 +3008,7 @@ function init(canvasId) {
     var dz = -inp.x * sin + inp.z * cos;
     var speed = 11 * speedMult; // Phase 4: bicycle multiplier
     var moved = false;
-    if (!movementLocked) { // Phase 4: sitting / sky-wheel riding freezes walking
+    if (!movementLocked && !hugState) { // Phase 4: sitting / sky-wheel riding freezes walking; hugs too
       var st = stepMover(player.position.x, player.position.z, dx, dz, speed, dt);
       player.position.x = st.x; player.position.z = st.z;
       moved = st.moved && (dx || dz);
@@ -2952,6 +3033,13 @@ function init(canvasId) {
   function updateCamera(dt) {
     var tp = cameraTargetOverride || player.position; // Phase 4: follow gondola while riding
     _camTarget.set(tp.x, tp.y + 2.2, tp.z);
+    /* gentle auto-follow: while walking, the camera swings behind the character */
+    if (playerMovingState && !orbit.dragging && camPointers.size === 0 && !ridingWheel && !ridingBike) {
+      var dyaw = playerYaw - orbit.yaw;
+      while (dyaw > Math.PI) dyaw -= Math.PI * 2;
+      while (dyaw < -Math.PI) dyaw += Math.PI * 2;
+      orbit.yaw += dyaw * (1 - Math.exp(-dt * 1.6));
+    }
     var pzn = zoneAt(player.position.x, player.position.z); // Phase 2 interiors
     var wantD = pzn ? Math.min(orbit.dist, 11) : orbit.dist;
     camDistSm = lerp(camDistSm, wantD, 1 - Math.exp(-dt * 3));
@@ -3007,7 +3095,10 @@ function init(canvasId) {
     var t = clock.elapsedTime;
     waterUniforms.uTime.value = t;
     updatePlayer(dt, t);
-    updatePartner(dt, t); // Phase 3: Tara follow / porch idle
+    updatePartner(dt, t); // Phase 3: Tara idle / porch / remote
+    updateHug(dt); // social: hug sequence overrides both rigs
+    updateHearts(dt);
+    updateGift(dt, t);
     updatePhase4(dt, t); // Phase 4: sky wheels, boats, campfire warmth
     updateCamera(dt);
     updateDayNight(dt, t);
@@ -3023,6 +3114,7 @@ function init(canvasId) {
   canvas.addEventListener('pointerdown', onCanvasDown);
   window.addEventListener('pointermove', onCanvasMove);
   window.addEventListener('pointerup', onCanvasUp);
+  window.addEventListener('pointercancel', onCanvasUp);
   canvas.addEventListener('wheel', onWheel, { passive: false });
   window.addEventListener('resize', onResize);
   buildJoystick();
@@ -3041,6 +3133,16 @@ function init(canvasId) {
   return {
     setTimeOfDay: function (h) { manualHour = (h === null || h === undefined) ? null : ((h % 24) + 24) % 24; },
     getPlayerPos: function () { return { x: player.position.x, y: player.position.y, z: player.position.z }; },
+    getPartnerPos: function () { return { x: partner.position.x, y: partner.position.y, z: partner.position.z }; },
+    getRole: function () { return myRole; },
+    getPlayerName: function () { return myName; },
+    getPartnerName: function () { return partnerName; },
+    playEmote: function (name) { playEmoteOn(playerRig, name); },
+    playPartnerEmote: function (name) { playEmoteOn(partnerRig, name); },
+    startHug: startHug,
+    isHugging: function () { return !!hugState; },
+    showGift: showGift,
+    spawnHearts: function (n) { spawnHearts(player.position.x, player.position.y + 2.6, player.position.z, n || 6); },
     showPrompt: showPrompt,   // Phase 2 prompt API (also on E key / tap)
     hidePrompt: hidePrompt,
     setPartnerOnline: setPartnerOnline, // Phase 3: Tara follow (true) / porch idle (false)
@@ -3102,6 +3204,7 @@ function init(canvasId) {
       canvas.removeEventListener('pointerdown', onCanvasDown);
       window.removeEventListener('pointermove', onCanvasMove);
       window.removeEventListener('pointerup', onCanvasUp);
+      window.removeEventListener('pointercancel', onCanvasUp);
       canvas.removeEventListener('wheel', onWheel);
       window.removeEventListener('resize', onResize);
       if (joystickEls && joystickEls.base.parentNode) joystickEls.base.parentNode.removeChild(joystickEls.base);
