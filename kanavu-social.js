@@ -45,12 +45,40 @@ function buildDreamPointsPill() {
   document.body.appendChild(dpPill);
   renderDreamPoints();
 }
+var DP_DAILY_CAP = 150; // max Dream points earnable per day
+var DP_EARNED_KEY = 'kanavu-dp-earned-v1';
+function getDpEarnedToday() {
+  try {
+    var raw = localStorage.getItem(DP_EARNED_KEY);
+    if (!raw) return 0;
+    var d = JSON.parse(raw);
+    return d.date === todayStr() ? (d.total || 0) : 0;
+  } catch (e) { return 0; }
+}
+function addDpEarnedToday(n) {
+  try {
+    var today = todayStr();
+    var raw = localStorage.getItem(DP_EARNED_KEY);
+    var d = raw ? JSON.parse(raw) : null;
+    if (!d || d.date !== today) d = { date: today, total: 0 };
+    d.total += n;
+    localStorage.setItem(DP_EARNED_KEY, JSON.stringify(d));
+  } catch (e) {}
+}
 function addDreamPoints(n, reason) {
   if (!n || n <= 0) return;
-  dreamPoints += n;
+  // Daily cap
+  var earned = getDpEarnedToday();
+  var allowed = Math.min(n, DP_DAILY_CAP - earned);
+  if (allowed <= 0) {
+    if (reason) toast('Daily Dream point limit reached 💭 (comes back tomorrow!)');
+    return;
+  }
+  dreamPoints += allowed;
+  addDpEarnedToday(allowed);
   saveDreamPoints();
   renderDreamPoints();
-  if (reason) toast('+' + n + ' 💭 Dream points — ' + reason);
+  if (reason) toast('+' + allowed + ' 💭 Dream points — ' + reason);
 }
 function spendDreamPoints(n) {
   if (dreamPoints < n) return false;
@@ -420,7 +448,8 @@ var DECOR_TYPES = [
   { id: 'grass', icon: '🌿', name: 'Grass tuft' },
   { id: 'mushroom', icon: '🍄', name: 'Mushroom' },
   { id: 'stone', icon: '🪨', name: 'Stone' },
-  { id: 'lantern', icon: '🏮', name: 'Lantern' }
+  { id: 'lantern', icon: '🏮', name: 'Lantern' },
+  { id: '__remove', icon: '🧹', name: 'Remove' }
 ];
 var decorMode = null; // type being placed, or null
 function openDecorate() {
@@ -483,13 +512,22 @@ function showDecorBanner() {
     if (!decorMode) return;
     try {
       var pos = worldApi.getPlayerPos();
-      if (pos && worldApi.addDecoration) {
+      if (!pos) return;
+      if (decorMode === '__remove') {
+        // Remove mode: remove nearest decoration
+        if (worldApi.removeDecorationAt && worldApi.removeDecorationAt(pos.x, pos.z)) {
+          toast('🧹 Removed');
+        } else {
+          toast('Nothing to remove here');
+        }
+      } else if (worldApi.addDecoration) {
         // Place slightly in front of the player
         var yaw = worldApi.getPlayerYaw ? worldApi.getPlayerYaw() : 0;
         var px = pos.x + Math.sin(yaw) * 2;
         var pz = pos.z + Math.cos(yaw) * 2;
-        worldApi.addDecoration(decorMode, px, pz);
-        addDreamPoints(2, 'decorated');
+        if (worldApi.addDecoration(decorMode, px, pz)) {
+          addDreamPoints(2, 'decorated');
+        }
       }
     } catch (e) {}
   };
@@ -1379,11 +1417,9 @@ function setBuildingName(type, side, name) {
   try { localStorage.setItem(BNAME_KEY, JSON.stringify(names)); } catch (e) {}
 }
 var buildingModal = null;
-function openBuilding(type, side) {
+function openBuilding(type) {
   if (buildingModal) { document.body.removeChild(buildingModal); buildingModal = null; }
   var info = BUILDING_INFO[type] || { icon: '🏠', name: 'Building', blurb: '' };
-  var customName = getBuildingName(type, side);
-  var displayName = customName || info.name;
   var m = el('div', 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;' +
     'background:rgba(20,10,14,.72);backdrop-filter:blur(4px);' + BASE_FONT);
   var actions = '';
@@ -1397,12 +1433,10 @@ function openBuilding(type, side) {
     'box-shadow:0 16px 60px rgba(0,0,0,.6);max-height:86vh;overflow-y:auto;">' +
     '<div style="font-size:40px;margin-bottom:8px;">' + info.icon + '</div>' +
     '<div style="font-size:13px;letter-spacing:.3em;color:rgba(245,200,110,.7);margin-bottom:6px;">★ ' +
-    escHtml(displayName).toUpperCase() + ' ★</div>' +
+    info.name.toUpperCase() + ' ★</div>' +
     '<div style="font-size:15px;font-style:italic;color:rgba(244,232,216,.75);margin:12px 0 18px;line-height:1.5;">' +
     info.blurb + '</div>' +
     (actions ? '<div style="display:flex;gap:10px;justify-content:center;margin-bottom:6px;">' + actions + '</div>' : '') +
-    '<button id="ks-brename" style="margin-top:6px;background:none;border:none;color:rgba(245,200,110,.7);' +
-    'font-family:inherit;font-size:13px;cursor:pointer;">✏️ Rename</button><br>' +
     '<button id="ks-bclose" style="margin-top:10px;background:none;border:none;color:rgba(244,232,216,.45);' +
     'font-family:inherit;font-size:13px;cursor:pointer;">close</button></div>';
   document.body.appendChild(m);
@@ -1410,19 +1444,7 @@ function openBuilding(type, side) {
   m.querySelector('#ks-bclose').onclick = function () {
     document.body.removeChild(m); buildingModal = null;
   };
-  m.querySelector('#ks-brename').onclick = function () {
-    var current = getBuildingName(type, side) || info.name;
-    var next = prompt('Name this ' + info.name + ':', current);
-    if (next !== null) {
-      next = next.trim().slice(0, 24);
-      setBuildingName(type, side, next || null);
-      toast(next ? '✏️ Renamed to "' + next + '"' : '✏️ Name reset');
-      document.body.removeChild(m); buildingModal = null;
-      openBuilding(type, side);
-      // Refresh the prompt label in the world
-      try { if (worldApi && worldApi.refreshBuildingLabels) worldApi.refreshBuildingLabels(); } catch (e) {}
-    }
-  };
+  m.addEventListener('click', function (e) { if (e.target === m) { document.body.removeChild(m); buildingModal = null; } });
   m.addEventListener('click', function (e) { if (e.target === m) { document.body.removeChild(m); buildingModal = null; } });
   var sleepBtn = m.querySelector('#ks-bsleep');
   if (sleepBtn) sleepBtn.onclick = function () {
@@ -1669,5 +1691,5 @@ function init(w, m) {
   });
 }
 
-window.KanavuSocial = { init: init, openTheatre: openTheatre, openBuilding: openBuilding, toast: toast, BUILDING_INFO: BUILDING_INFO, version: 'social-2.0' };
+window.KanavuSocial = { init: init, openTheatre: openTheatre, openBuilding: openBuilding, toast: toast, BUILDING_INFO: BUILDING_INFO, addDreamPoints: addDreamPoints, version: 'social-2.0' };
 })();

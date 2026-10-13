@@ -145,16 +145,23 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
       <input type="date" id="set-anniversary" style="width:100%;padding:8px;border-radius:8px;border:1px solid rgba(245,200,110,.3);background:rgba(0,0,0,.3);color:#f4e8d8;font-family:inherit;" />
     </div>
   </div>
+  <div class="set-row">
+    <span class="set-lbl">✏️ Name</span>
+    <div style="flex:1;display:flex;gap:8px;">
+      <input type="text" id="set-name" maxlength="24" placeholder="Your name" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(245,200,110,.3);background:rgba(0,0,0,.3);color:#f4e8d8;font-family:inherit;" />
+      <button id="set-name-save" class="set-opt" style="padding:8px 14px;">Save</button>
+    </div>
+  </div>
   <button class="btn" id="set-close">Close ✕</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="kanavu-world.js?v=11"></script>
+<script src="kanavu-world.js?v=12"></script>
 <script src="kanavu-multiplayer.js?v=2"></script>
 <script src="kanavu-music.js?v=2"></script>
 <script src="kanavu-ambience.js?v=1"></script>
-<script src="kanavu-social.js?v=3"></script>
+<script src="kanavu-social.js?v=4"></script>
 <script>
 (function(){
   'use strict';
@@ -538,6 +545,26 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
       if (v) localStorage.setItem('kanavu_anniversary', v);
       else localStorage.removeItem('kanavu_anniversary');
     } catch (e) {}
+  });
+  /* Name (editable anytime) */
+  var nameInput = $('set-name');
+  try { nameInput.value = localStorage.getItem('kanavu_player_name') || ''; } catch (e) {}
+  $('set-name-save').addEventListener('click', function(){
+    var v = nameInput.value.trim().slice(0, 24);
+    if (!v) return;
+    try {
+      localStorage.setItem('kanavu_player_name', v);
+      // Update Supabase profile too
+      if (typeof sbAuth !== 'undefined' && sbAuth) {
+        sbAuth.auth.updateUser({ data: { name: v } }).catch(function(){});
+      }
+      // Notify partner of the name change
+      if (typeof mp !== 'undefined' && mp && mp.sendMsg) {
+        mp.sendMsg('notify', { text: '✏️ Your partner is now called "' + v + '"' });
+      }
+    } catch (e) {}
+    // Update the 3D name label
+    try { if (worldApi && worldApi.setPlayerName) worldApi.setPlayerName(v); } catch (err) {}
   });
 })();
 /* M2: service worker + soft notification nudges */

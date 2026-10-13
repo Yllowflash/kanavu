@@ -477,7 +477,7 @@ function init(canvasId, opts) {
   var folMat = new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.9 });
   var folColors = [0x4a7a3e, 0x5d8a44, 0x3e6e38, 0x6fa055, 0x557f42];
   function buildTrees(center, seed) {
-    var pts = scatterPositions(center, 34, seed, 2.0, function (x, z) { return clearOfFeatures(x, z); });
+    var pts = scatterPositions(center, 10, seed, 2.0, function (x, z) { return clearOfFeatures(x, z); });
     var quads = [[], [], [], []];
     pts.forEach(function (p) {
       var q = (p.x < center.cx ? 0 : 1) + (p.z < center.cz ? 0 : 2);
@@ -1268,6 +1268,47 @@ function init(canvasId, opts) {
     var barnLight = new THREE.PointLight(0xffb86e, 25, 20, 1.8);
     barnLight.position.set(0, 4, 6);
     g.add(barnLight);
+    /* Clickable pumpkin game: 5 pumpkins, light them all to activate the LEDs */
+    g.userData.pumpkins = [];
+    g.userData.leds = [];
+    g.userData.pumpkinsLit = 0;
+    var pumpkinSpots = [[-3.5, 7.5], [3.5, 7.5], [-5.5, 4.5], [5.5, 4.5], [0, 9]];
+    pumpkinSpots.forEach(function (ps, pi) {
+      var pGeo = new THREE.SphereGeometry(0.55, 12, 10);
+      var pMat = new THREE.MeshStandardMaterial({ color: 0xd35400, roughness: 0.7, emissive: 0x000000 });
+      var pk = new THREE.Mesh(pGeo, pMat);
+      pk.position.set(ps[0], 0.48, ps[1]);
+      pk.scale.y = 0.88;
+      pk.castShadow = true;
+      pk.userData = { isPumpkin: true, idx: pi, lit: false };
+      g.add(pk);
+      // Carved face (dark, unlit)
+      var faceMat = new THREE.MeshBasicMaterial({ color: 0x1a0a05 });
+      var eyeL = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.18), faceMat);
+      eyeL.position.set(ps[0] - 0.18, 0.62, ps[1] + 0.48);
+      eyeL.rotation.y = 0.15;
+      g.add(eyeL);
+      var eyeR = new THREE.Mesh(new THREE.PlaneGeometry(0.14, 0.18), faceMat);
+      eyeR.position.set(ps[0] + 0.18, 0.62, ps[1] + 0.48);
+      eyeR.rotation.y = -0.15;
+      g.add(eyeR);
+      var mouth = new THREE.Mesh(new THREE.PlaneGeometry(0.4, 0.14), faceMat);
+      mouth.position.set(ps[0], 0.35, ps[1] + 0.5);
+      g.add(mouth);
+      g.userData.pumpkins.push({ mesh: pk, eyes: [eyeL, eyeR], mouth: mouth });
+    });
+    /* LED string lights (start dim, brighten when all pumpkins lit) */
+    var ledMat = new THREE.MeshBasicMaterial({ color: 0xffc86e, transparent: true, opacity: 0.25 });
+    var ledGeo = new THREE.SphereGeometry(0.11, 6, 6);
+    for (var li = 0; li <= 30; li++) {
+      var lt = li / 30;
+      var led = new THREE.Mesh(ledGeo, ledMat.clone());
+      // Around the barn perimeter at roof height
+      var ang = lt * Math.PI * 2;
+      led.position.set(Math.cos(ang) * 5.8, 6.2 + Math.sin(lt * Math.PI * 4) * 0.2, Math.sin(ang) * 4.8);
+      g.add(led);
+      g.userData.leds.push(led);
+    }
     g.position.set(bx, gy, bz);
     g.rotation.y = yaw;
     scene.add(g);
@@ -1382,9 +1423,38 @@ function init(canvasId, opts) {
     scene.add(decorGroup);
   }
   function addDecoration(type, x, z) {
+    // Daily limit: 12 decorations per day
+    try {
+      var today = new Date().toISOString().slice(0, 10);
+      var raw = localStorage.getItem('kanavu-decor-count-v1');
+      var dc = raw ? JSON.parse(raw) : null;
+      if (!dc || dc.date !== today) dc = { date: today, count: 0 };
+      if (dc.count >= 12) {
+        try { if (window.KanavuSocial && window.KanavuSocial.toast) window.KanavuSocial.toast('🌸 Daily decoration limit reached (12/day)'); } catch (e) {}
+        return false;
+      }
+      dc.count++;
+      localStorage.setItem('kanavu-decor-count-v1', JSON.stringify(dc));
+    } catch (e) {}
     decorations.push({ type: type, x: +x.toFixed(1), z: +z.toFixed(1), rot: Math.random() * Math.PI * 2 });
     saveDecorations();
     renderDecorations();
+    return true;
+  }
+  function removeDecorationAt(x, z) {
+    // Remove the nearest decoration within 2 units
+    var best = -1, bd = 2.0;
+    decorations.forEach(function (d, i) {
+      var dist = Math.hypot(d.x - x, d.z - z);
+      if (dist < bd) { bd = dist; best = i; }
+    });
+    if (best >= 0) {
+      decorations.splice(best, 1);
+      saveDecorations();
+      renderDecorations();
+      return true;
+    }
+    return false;
   }
   function clearDecorations() {
     decorations = [];
@@ -1598,15 +1668,20 @@ function init(canvasId, opts) {
         if (b.type === 'theatre' && window.KanavuSocial && window.KanavuSocial.openTheatre) {
           window.KanavuSocial.openTheatre();
         } else if (window.KanavuSocial && window.KanavuSocial.openBuilding) {
-          window.KanavuSocial.openBuilding(b.type, b.side); // popup pattern for every building; no interiors
+          window.KanavuSocial.openBuilding(b.type); // popup pattern for every building; no interiors
         }
       }
     });
   }
 
   BUILDINGS.forEach(function (b) { buildExterior(b); });
-  /* Halloween Barn beside the bridge entrance (island A side) */
-  halloweenBarn = buildHalloweenBarn(-64, 16, Math.PI * 0.15);
+  /* Halloween Barn near the shore, facing the inner island */
+  (function () {
+    var bx = -58, bz = 10;
+    var dx = ISL_A.cx - bx, dz = ISL_A.cz - bz;
+    var yaw = Math.atan2(dx, dz); // face the island center
+    halloweenBarn = buildHalloweenBarn(bx, bz, yaw);
+  })();
   renderDecorations(); // island decorations (flowers, grass, etc.)
   /* ---- interiors: cozy teleport rooms far south over water ---- */
   var RW = 13, RD = 11, WH = 4.2;
@@ -3667,13 +3742,67 @@ function init(canvasId, opts) {
   function onCanvasDown(e) {
     if (e.target !== canvas) return;
     try { canvas.setPointerCapture(e.pointerId); } catch (err) {}
-    camPointers.set(e.pointerId, { x: e.clientX, y: e.clientY });
+    camPointers.set(e.pointerId, { x: e.clientX, y: e.clientY, t: Date.now() });
     if (camPointers.size === 2) { // start pinch: stop single-finger orbit
       var p = Array.from(camPointers.values());
       pinchD0 = Math.hypot(p[0].x - p[1].x, p[0].y - p[1].y);
       orbit.dragging = false;
     } else if (camPointers.size === 1) {
       orbit.dragging = true; orbit.lx = e.clientX; orbit.ly = e.clientY;
+    }
+  }
+  /* Pumpkin tap: raycast for clickable pumpkins on quick taps */
+  var raycaster = new THREE.Raycaster();
+  var tapNDC = new THREE.Vector2();
+  function onCanvasTap(e) {
+    if (!halloweenBarn || !halloweenBarn.userData.pumpkins) return;
+    // Only if it was a quick tap (not a drag)
+    var p = camPointers.get(e.pointerId);
+    if (!p) return;
+    var dt = Date.now() - (p.t || 0);
+    var moved = Math.hypot(e.clientX - p.x, e.clientY - p.y);
+    if (dt > 400 || moved > 12) return; // was a drag, not a tap
+    // Raycast
+    var rect = canvas.getBoundingClientRect();
+    tapNDC.x = ((e.clientX - rect.left) / rect.width) * 2 - 1;
+    tapNDC.y = -((e.clientY - rect.top) / rect.height) * 2 + 1;
+    raycaster.setFromCamera(tapNDC, camera);
+    var meshes = halloweenBarn.userData.pumpkins.map(function (pk) { return pk.mesh; });
+    var hits = raycaster.intersectObjects(meshes, false);
+    if (hits.length) {
+      var mesh = hits[0].object;
+      if (mesh.userData.isPumpkin && !mesh.userData.lit) {
+        lightPumpkin(mesh.userData.idx);
+      }
+    }
+  }
+  function lightPumpkin(idx) {
+    var barn = halloweenBarn;
+    if (!barn || !barn.userData.pumpkins[idx]) return;
+    var pk = barn.userData.pumpkins[idx];
+    if (pk.mesh.userData.lit) return;
+    pk.mesh.userData.lit = true;
+    // Light up: emissive orange glow
+    pk.mesh.material.emissive.setHex(0xff6b1a);
+    pk.mesh.material.emissiveIntensity = 0.9;
+    // Face glows too
+    pk.eyes.forEach(function (e) { e.material.color.setHex(0xffd93d); });
+    pk.mouth.material.color.setHex(0xffd93d);
+    barn.userData.pumpkinsLit++;
+    try { if (window.KanavuSocial && window.KanavuSocial.toast) window.KanavuSocial.toast('🎃 Pumpkin lit! (' + barn.userData.pumpkinsLit + '/5)'); } catch (e) {}
+    // Haptic
+    try { if (navigator.vibrate) navigator.vibrate(30); } catch (e) {}
+    if (barn.userData.pumpkinsLit >= 5) {
+      // All lit! Activate the LED string lights
+      barn.userData.leds.forEach(function (led) {
+        led.material.opacity = 1.0;
+      });
+      try {
+        if (window.KanavuSocial && window.KanavuSocial.toast) window.KanavuSocial.toast('✨ All pumpkins lit! The barn is glowing!');
+        if (window.KanavuSocial && window.KanavuSocial.addDreamPoints) window.KanavuSocial.addDreamPoints(25, 'pumpkin hunt!');
+      } catch (e) {}
+      // Celebratory hearts
+      try { spawnHearts(barn.position.x, 4, barn.position.z, 12); } catch (e) {}
     }
   }
   function onCanvasMove(e) {
@@ -3692,6 +3821,7 @@ function init(canvasId, opts) {
     orbit.lx = e.clientX; orbit.ly = e.clientY;
   }
   function onCanvasUp(e) {
+    onCanvasTap(e); // check for pumpkin taps before clearing
     camPointers.delete(e.pointerId);
     if (camPointers.size < 2) pinchD0 = 0;
     if (camPointers.size === 0) orbit.dragging = false;
@@ -4122,6 +4252,7 @@ function init(canvasId, opts) {
     shootingStar: shootingStar, // M8: miss-you shooting star
     addDecoration: addDecoration, // island decorations
     clearDecorations: clearDecorations,
+    removeDecorationAt: removeDecorationAt,
     refreshBuildingLabels: function () { // update prompt labels after rename
       try {
         var raw = localStorage.getItem('kanavu-building-names-v1');
@@ -4141,6 +4272,7 @@ function init(canvasId, opts) {
     getPartnerPos: function () { return { x: partner.position.x, y: partner.position.y, z: partner.position.z }; },
     getRole: function () { return myRole; },
     getPlayerName: function () { return myName; },
+    setPlayerName: function (v) { myName = v; }, // name change (takes full effect on reload)
     getPartnerName: function () { return partnerName; },
     playEmote: function (name) { playEmoteOn(playerRig, name); },
     playPartnerEmote: function (name) { playEmoteOn(partnerRig, name); },
