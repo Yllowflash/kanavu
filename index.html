@@ -16,127 +16,306 @@
 *{margin:0;padding:0;box-sizing:border-box;-webkit-tap-highlight-color:transparent}
 html,body{height:100%;overflow:hidden}
 body{font-family:Georgia,'Times New Roman',serif;color:#f4e8d8;background:#1a0e12;user-select:none;-webkit-user-select:none}
-#title-screen{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:radial-gradient(ellipse at 50% 30%,#4a2a20 0%,#2a1a12 50%,#1a0e12 100%);transition:opacity .8s ease}
-#title-screen.hidden{opacity:0;pointer-events:none}
+.screen{position:fixed;inset:0;z-index:10;display:flex;flex-direction:column;align-items:center;justify-content:center;text-align:center;background:radial-gradient(ellipse at 50% 30%,#4a2a20 0%,#2a1a12 50%,#1a0e12 100%);transition:opacity .8s ease;padding:24px}
+.screen.hidden{opacity:0;pointer-events:none}
+.screen.gone{display:none}
 .sun-glow{width:100px;height:100px;border-radius:50%;background:radial-gradient(circle,#ffe9b8 0%,#f5a86e 40%,rgba(245,168,110,0) 70%);box-shadow:0 0 80px 30px rgba(245,168,110,.25);margin-bottom:28px;animation:glowPulse 4s ease-in-out infinite}
 @keyframes glowPulse{0%,100%{transform:scale(1)}50%{transform:scale(1.06)}}
 h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;text-indent:.12em;line-height:1;background:linear-gradient(180deg,#fff8ec 20%,#f5d9a8 55%,#e8956a 100%);-webkit-background-clip:text;background-clip:text;color:transparent}
 .tagline{margin-top:12px;font-size:clamp(14px,3vw,19px);letter-spacing:.4em;text-indent:.4em;color:rgba(244,232,216,.6);font-style:italic}
-.btn{margin-top:44px;padding:15px 58px;font-family:inherit;font-size:18px;letter-spacing:.25em;text-indent:.25em;cursor:pointer;color:#2a1a12;background:linear-gradient(180deg,#ffe9b8,#f5a86e);border:none;border-radius:999px;box-shadow:0 0 30px rgba(245,168,110,.4),0 6px 18px rgba(0,0,0,.4);transition:transform .2s ease}
+.btn{margin-top:26px;padding:15px 52px;font-family:inherit;font-size:18px;letter-spacing:.25em;text-indent:.25em;cursor:pointer;color:#2a1a12;background:linear-gradient(180deg,#ffe9b8,#f5a86e);border:none;border-radius:999px;box-shadow:0 0 30px rgba(245,168,110,.4),0 6px 18px rgba(0,0,0,.4);transition:transform .2s ease}
 .btn:active{transform:scale(.96)}
+.btn.ghost{background:transparent;color:#f5d9a8;border:1px solid rgba(245,200,110,.45);box-shadow:none;font-size:15px;padding:12px 40px}
 .foot{position:absolute;bottom:24px;font-size:12px;letter-spacing:.2em;color:rgba(244,232,216,.35);font-style:italic}
+.card{background:linear-gradient(180deg,rgba(58,33,38,.96),rgba(36,19,24,.96));border:1px solid rgba(245,200,110,.35);border-radius:20px;padding:30px 32px;max-width:380px;width:100%;box-shadow:0 16px 60px rgba(0,0,0,.55)}
+.card h2{font-size:22px;letter-spacing:.14em;margin-bottom:6px;color:#ffe9b8;font-weight:400}
+.card .sub{font-size:13px;color:rgba(244,232,216,.55);font-style:italic;margin-bottom:20px}
+.field{width:100%;padding:12px 16px;margin-bottom:12px;border-radius:12px;border:1px solid rgba(245,200,110,.3);background:rgba(0,0,0,.32);color:#f4e8d8;font-family:inherit;font-size:15px;outline:none}
+.field:focus{border-color:rgba(245,200,110,.7)}
+.err{font-size:13px;color:#e6a1a1;min-height:20px;margin:6px 0}
+.role-pick{display:flex;gap:10px;justify-content:center;margin:6px 0 16px}
+.role-pick button{flex:1;padding:12px;border-radius:12px;cursor:pointer;font-family:inherit;font-size:14px;border:1px solid rgba(245,200,110,.3);background:transparent;color:#f5d9a8}
+.role-pick button.sel{background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;border:none;font-weight:bold}
+.code-big{font-size:38px;letter-spacing:.25em;font-weight:bold;color:#ffe9b8;margin:12px 0}
 #game-screen{position:fixed;inset:0;z-index:1;display:none}
 #game-screen.visible{display:block}
 #world-canvas{position:absolute;inset:0;width:100%;height:100%;display:block;touch-action:none}
 #loading{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(26,14,18,.85);color:#f5d9a8;font-size:18px;letter-spacing:.2em}
 #loading.visible{display:flex}
-#mp-btn{position:fixed;top:14px;right:14px;z-index:50;display:none;padding:10px 18px;border:1px solid rgba(245,200,110,.4);border-radius:999px;background:rgba(26,14,18,.65);color:#f5d9a8;font-family:inherit;font-size:14px;letter-spacing:.08em;cursor:pointer;backdrop-filter:blur(6px)}
-#mp-btn.visible{display:block}
-#mp-btn .dot{display:inline-block;width:8px;height:8px;border-radius:50%;background:#666;margin-right:7px;vertical-align:1px}
-#mp-btn .dot.on{background:#a8e6a1;box-shadow:0 0 8px #a8e6a1}
+#sound-btn{position:fixed;top:14px;left:14px;z-index:50;display:none;width:44px;height:44px;border-radius:50%;border:1px solid rgba(245,200,110,.4);background:rgba(26,14,18,.65);color:#f5d9a8;font-size:19px;cursor:pointer;backdrop-filter:blur(6px)}
 </style>
 </head>
 <body>
-<div id="title-screen">
+<div class="screen" id="title-screen">
   <div class="sun-glow"></div>
   <h1 class="title">Kanavu</h1>
   <div class="tagline">connecting dreams</div>
   <button class="btn" id="begin-btn">Begin</button>
   <div class="foot">a cozy world for two</div>
 </div>
+
+<div class="screen gone" id="auth-screen">
+  <div class="card">
+    <h2>WELCOME BACK</h2>
+    <div class="sub">sign in, or wander in as a guest</div>
+    <input class="field" id="auth-name" placeholder="Your name" maxlength="24" />
+    <input class="field" id="auth-email" type="email" placeholder="Email" autocomplete="email" />
+    <input class="field" id="auth-pass" type="password" placeholder="Password" autocomplete="current-password" />
+    <div class="err" id="auth-err"></div>
+    <button class="btn" id="signin-btn" style="width:100%;margin-top:6px">Sign in</button>
+    <button class="btn ghost" id="signup-btn" style="width:100%">Create account</button>
+    <button class="btn ghost" id="guest-btn" style="width:100%;border:none">Continue as guest →</button>
+  </div>
+</div>
+
+<div class="screen gone" id="invite-screen">
+  <div class="card">
+    <h2>WALK TOGETHER</h2>
+    <div class="sub">invite-only · just the two of you</div>
+    <div id="invite-main">
+      <div style="font-size:14px;margin-bottom:8px;color:rgba(244,232,216,.7)">I am playing as…</div>
+      <div class="role-pick" id="role-pick">
+        <button data-role="boy" class="sel">🧑 The Boy</button>
+        <button data-role="girl">👧 The Girl</button>
+      </div>
+      <button class="btn" id="create-btn" style="width:100%">Create invite code</button>
+      <button class="btn ghost" id="join-toggle" style="width:100%">Enter a code instead</button>
+      <div id="reconnect-row"></div>
+    </div>
+    <div id="invite-pane" style="display:none"></div>
+  </div>
+</div>
+
 <div id="loading">loading the islands...</div>
 <div id="game-screen">
   <canvas id="world-canvas"></canvas>
 </div>
-<button id="mp-btn"><span class="dot" id="mp-dot"></span><span id="mp-label">Walk Together</span></button>
-<button id="sound-btn" title="sound on/off" style="position:fixed;top:14px;left:14px;z-index:50;display:none;width:44px;height:44px;border-radius:50%;border:1px solid rgba(245,200,110,.4);background:rgba(26,14,18,.65);color:#f5d9a8;font-size:19px;cursor:pointer;backdrop-filter:blur(6px)">♪</button>
+<button id="sound-btn" title="sound on/off">♪</button>
+
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="kanavu-world.js?v=3"></script>
-<script src="kanavu-multiplayer.js?v=1"></script>
+<script src="kanavu-world.js?v=4"></script>
+<script src="kanavu-multiplayer.js?v=2"></script>
 <script src="kanavu-music.js?v=1"></script>
 <script src="kanavu-ambience.js?v=1"></script>
+<script src="kanavu-social.js?v=1"></script>
 <script>
 (function(){
-  var beginBtn = document.getElementById('begin-btn');
-  var titleScreen = document.getElementById('title-screen');
-  var gameScreen = document.getElementById('game-screen');
-  var loading = document.getElementById('loading');
-  var mpBtn = document.getElementById('mp-btn');
-  var soundBtn = document.getElementById('sound-btn');
-  var mpDot = document.getElementById('mp-dot');
-  var mpLabel = document.getElementById('mp-label');
-  var started = false;
-  var worldApi = null, mp = null;
-  beginBtn.addEventListener('click', function(){
-    if (started) return;
-    started = true;
-    titleScreen.classList.add('hidden');
+  'use strict';
+  var SUPABASE_URL = 'https://ersejxowxutsefalyjaf.supabase.co';
+  var ANON_KEY = 'sb_publishable_lGEyfvUYZqa5B5l5uwNizQ_APQcmK8i';
+
+  function $(id){ return document.getElementById(id); }
+  function show(id){ $(id).classList.remove('gone'); requestAnimationFrame(function(){ $(id).classList.remove('hidden'); }); }
+  function hide(id){ $(id).classList.add('hidden'); setTimeout(function(){ $(id).classList.add('gone'); }, 850); }
+
+  var titleScreen = $('title-screen'), authScreen = $('auth-screen'), inviteScreen = $('invite-screen');
+  var gameScreen = $('game-screen'), loading = $('loading'), soundBtn = $('sound-btn');
+
+  var sbAuth = null, mp = null, worldApi = null;
+  var myName = '', myRole = 'boy', authed = false;
+
+  try { sbAuth = window.supabase.createClient(SUPABASE_URL, ANON_KEY); } catch (e) {}
+
+  /* ---------- title -> auth ---------- */
+  $('begin-btn').addEventListener('click', function(){
+    hide('title-screen');
+    // skip auth if a session already exists
+    if (sbAuth) {
+      sbAuth.auth.getSession().then(function(res){
+        var sess = res && res.data && res.data.session;
+        if (sess && sess.user) {
+          authed = true;
+          myName = (sess.user.user_metadata && sess.user.user_metadata.name) || sess.user.email.split('@')[0];
+          try { localStorage.setItem('kanavu_player_name', myName); } catch(e){}
+          showInvite();
+        } else show('auth-screen');
+      }).catch(function(){ show('auth-screen'); });
+    } else show('auth-screen');
+  });
+
+  /* ---------- auth ---------- */
+  function authErr(msg){ $('auth-err').textContent = msg || ''; }
+  function readName(){
+    var v = $('auth-name').value.trim();
+    if (v) { myName = v; try { localStorage.setItem('kanavu_player_name', v); } catch(e){} }
+    else if (!myName) { try { myName = localStorage.getItem('kanavu_player_name') || ''; } catch(e){} }
+    return myName;
+  }
+  $('signin-btn').addEventListener('click', function(){
+    authErr('');
+    var email = $('auth-email').value.trim(), pass = $('auth-pass').value;
+    readName();
+    if (!email || !pass) { authErr('Enter your email and password.'); return; }
+    authErr('Signing in…');
+    sbAuth.auth.signInWithPassword({ email: email, password: pass }).then(function(res){
+      if (res.error) { authErr(res.error.message); return; }
+      authed = true;
+      var u = res.data.user;
+      if (!myName) myName = (u.user_metadata && u.user_metadata.name) || email.split('@')[0];
+      if ($('auth-name').value.trim()) { try { sbAuth.auth.updateUser({ data: { name: myName } }); } catch(e){} }
+      showInvite();
+    }).catch(function(err){ authErr(err.message || 'Sign-in failed.'); });
+  });
+  $('signup-btn').addEventListener('click', function(){
+    authErr('');
+    var email = $('auth-email').value.trim(), pass = $('auth-pass').value;
+    readName();
+    if (!email || !pass) { authErr('Enter an email and a password.'); return; }
+    if (pass.length < 6) { authErr('Password needs at least 6 characters.'); return; }
+    authErr('Creating your account…');
+    sbAuth.auth.signUp({ email: email, password: pass, options: { data: { name: myName || email.split('@')[0] } } }).then(function(res){
+      if (res.error) { authErr(res.error.message); return; }
+      authed = true;
+      if (!myName) myName = email.split('@')[0];
+      authErr('');
+      showInvite();
+    }).catch(function(err){ authErr(err.message || 'Sign-up failed.'); });
+  });
+  $('guest-btn').addEventListener('click', function(){
+    readName();
+    if (!myName) myName = 'Guest';
+    showInvite();
+  });
+  function showInvite(){
+    hide('auth-screen');
+    show('invite-screen');
+    buildInvite();
+  }
+
+  /* ---------- invite ---------- */
+  var roleBtns = document.querySelectorAll('#role-pick button');
+  roleBtns.forEach(function(b){
+    b.addEventListener('click', function(){
+      roleBtns.forEach(function(x){ x.classList.remove('sel'); });
+      b.classList.add('sel');
+      myRole = b.getAttribute('data-role');
+      if (mp) mp.setMyRole(myRole);
+    });
+  });
+  function stubWorld(){
+    return {
+      getPlayerPos: function(){ return {x:0,y:0,z:0}; },
+      getPlayerAnim: function(){ return {moving:false,sitting:false,yaw:0}; },
+      setPartnerRemote: function(){}, setPartnerNet: function(){}, setPartnerOnline: function(){}
+    };
+  }
+  function ensureMp(){
+    if (mp) return mp;
+    mp = window.KanavuMultiplayer.init(stubWorld(), { playerName: myName || 'Player', myRole: myRole });
+    window.KanavuMP = mp;
+    return mp;
+  }
+  function pane(html){
+    $('invite-main').style.display = 'none';
+    var p = $('invite-pane'); p.style.display = 'block'; p.innerHTML = html;
+  }
+  function buildInvite(){
+    var row = $('reconnect-row'); row.innerHTML = '';
+    try {
+      var m = ensureMp(), saved = m.getSavedPair();
+      if (saved && saved.pairId) {
+        var b = document.createElement('button');
+        b.className = 'btn ghost'; b.style.width = '100%';
+        b.textContent = 'Reconnect to ' + (saved.partnerName || 'partner');
+        b.addEventListener('click', function(){
+          pane('<div style="font-size:14px;">Reconnecting…</div>');
+          m.reconnectSaved().then(function(r){
+            enterGame(r.myRole || 'boy', r.partnerName);
+          }).catch(function(err){ pane('<div class="err">' + err.message + '</div>'); });
+        });
+        row.appendChild(b);
+      }
+    } catch(e){}
+  }
+  $('create-btn').addEventListener('click', function(){
+    var m = ensureMp();
+    m.setMyRole(myRole);
+    pane('<div style="font-size:14px;">Creating your invite code…</div>');
+    m.generateCode().then(function(code){
+      pane(
+        '<div class="sub">share this with your partner (24 hours)</div>' +
+        '<div class="code-big">' + code + '</div>' +
+        '<button class="btn ghost" id="copy-code" style="width:100%">Copy code</button>' +
+        '<div style="font-size:13px;margin:14px 0;color:rgba(244,232,216,.55)" id="wait-note">Waiting for partner… you can head in now.</div>' +
+        '<button class="btn" id="enter-now" style="width:100%">Enter the islands</button>'
+      );
+      $('copy-code').addEventListener('click', function(){
+        try { if (navigator.clipboard) navigator.clipboard.writeText(code); this.textContent = 'Copied!'; }
+        catch(e){ this.textContent = code; }
+      });
+      $('enter-now').addEventListener('click', function(){ enterGame(myRole, null); });
+      var iv = setInterval(function(){
+        if (m.getPairId()) {
+          clearInterval(iv);
+          var w = $('wait-note');
+          if (w) { w.innerHTML = '<span style="color:#a8e6a1">Partner joined! Heading in…</span>'; }
+          setTimeout(function(){ enterGame(myRole, m.getPartner().name); }, 1200);
+        }
+        if (!$('invite-pane').isConnected) clearInterval(iv);
+      }, 800);
+    }).catch(function(err){ pane('<div class="err">' + err.message + '</div>'); });
+  });
+  $('join-toggle').addEventListener('click', function(){
+    pane(
+      '<div class="sub">enter your partner\'s code</div>' +
+      '<input class="field" id="join-code" placeholder="KAN-XXX" maxlength="7" ' +
+      'style="text-transform:uppercase;text-align:center;letter-spacing:.2em;font-size:20px;" />' +
+      '<div class="err" id="join-err"></div>' +
+      '<button class="btn" id="join-go" style="width:100%">Join</button>'
+    );
+    var inp = $('join-code'); inp.focus();
+    function go(){
+      var c = inp.value.trim().toUpperCase();
+      var m = ensureMp();
+      $('join-err').textContent = 'Connecting…';
+      m.joinCode(c).then(function(r){
+        enterGame(r.myRole || 'girl', r.partnerName);
+      }).catch(function(err){ $('join-err').textContent = err.message; });
+    }
+    $('join-go').addEventListener('click', go);
+    inp.addEventListener('keydown', function(e){ if (e.key === 'Enter') go(); e.stopPropagation(); });
+  });
+
+  /* ---------- enter the world ---------- */
+  var entered = false;
+  function enterGame(role, partnerName){
+    if (entered) return; entered = true;
+    hide('invite-screen');
     loading.classList.add('visible');
-    setTimeout(function(){ titleScreen.style.display = 'none'; }, 900);
-    // Let the loading screen paint before heavy init
     setTimeout(function(){
       try {
-        if (window.KanavuWorld) {
-          worldApi = KanavuWorld.init('world-canvas', {});
-          window.KanavuWorldApi = worldApi; // for console/debug
-          gameScreen.classList.add('visible');
-          loading.classList.remove('visible');
-          mpBtn.classList.add('visible');
-          soundBtn.style.display = 'block';
-          // Start the island soundscape: lofi desi chill-hop + calming nature
-          try {
-            if (window.KanavuMusic) KanavuMusic.start();
-            if (window.KanavuAmbience) KanavuAmbience.start();
-          } catch (sndErr) { console.warn('[audio] autoplay blocked:', sndErr); }
-          // Init multiplayer (graceful if Supabase fails)
-          try {
-            if (window.KanavuMultiplayer) {
-              var savedName = '';
-              try { savedName = localStorage.getItem('kanavu_player_name') || ''; } catch (e) {}
-              mp = KanavuMultiplayer.init(worldApi, { playerName: savedName || 'Player' });
-              window.KanavuMP = mp;
-              mp.onPresence(function (p) {
-                mpDot.className = 'dot' + (p.online ? ' on' : '');
-                mpLabel.textContent = p.online ? ('With ' + (p.name || 'partner')) : 'Walk Together';
-              });
-              // Persist name changes
-              var origShow = mp.showUI.bind(mp);
-              mp.showUI = function () {
-                origShow();
-                var iv = setInterval(function () {
-                  var inp = document.getElementById('kvmp-name');
-                  if (inp) {
-                    clearInterval(iv);
-                    inp.addEventListener('change', function () {
-                      try { localStorage.setItem('kanavu_player_name', inp.value.trim()); } catch (e) {}
-                    });
-                  } else if (!document.getElementById('kv-mp-ui')) clearInterval(iv);
-                }, 300);
-              };
-            }
-          } catch (mpErr) { console.warn('[mp] init failed, solo mode:', mpErr); }
-        } else {
-          loading.textContent = 'failed to load — please reload';
-        }
+        worldApi = window.KanavuWorld.init('world-canvas', {
+          role: role, playerName: myName || 'Player', partnerName: partnerName || 'Tara'
+        });
+        window.KanavuWorldApi = worldApi;
+        if (mp) mp.setWorldApi(worldApi);
+        if (window.KanavuSocial) window.KanavuSocial.init(worldApi, mp);
+        gameScreen.classList.add('visible');
+        loading.classList.remove('visible');
+        soundBtn.style.display = 'block';
+        try {
+          if (window.KanavuMusic) KanavuMusic.start();
+          if (window.KanavuAmbience) KanavuAmbience.start();
+        } catch (sndErr) {}
+        // let the partner know we're here
+        try { if (mp) mp.sendMsg('notify', { kind: 'login', text: '💛 ' + (myName || 'Your partner') + ' is here' }); } catch(e){}
       } catch(e) {
         loading.textContent = 'something went wrong — please reload';
       }
-    }, 100);
-  });
-  mpBtn.addEventListener('click', function () {
-    if (mp) mp.showUI();
-    else alert('Multiplayer is not available right now.');
-  });
+    }, 120);
+  }
+
+  /* ---------- sound toggle ---------- */
   var soundOn = true;
-  soundBtn.addEventListener('click', function () {
+  soundBtn.addEventListener('click', function(){
     soundOn = !soundOn;
     try {
       if (window.KanavuMusic) { if (soundOn) KanavuMusic.start(); else KanavuMusic.stop(); }
       if (window.KanavuAmbience) { if (soundOn) KanavuAmbience.start(); else KanavuAmbience.stop(); }
-    } catch (e) {}
+    } catch(e){}
     soundBtn.textContent = soundOn ? '♪' : '✕';
-    soundBtn.style.opacity = soundOn ? '1' : '0.45';
+    soundBtn.style.opacity = soundOn ? '1' : '.45';
   });
 })();
 </script>
