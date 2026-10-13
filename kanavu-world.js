@@ -2116,6 +2116,143 @@ function init(canvasId, opts) {
     else c.eyeG.scale.y = 1;
   }
 
+  /* ---- social emotes: wave, bow, laugh, cheer, shy, loveyou ---- */
+  var EMOTE_DUR = 2.4;
+  function playEmoteOn(rig, name) {
+    rig.emote = { name: name, t: 0, dur: EMOTE_DUR };
+  }
+  function applyEmotePose(c, name, t, dur) {
+    var k = 1 - Math.exp(-0.16 * 10);
+    function L(obj, prop, target) { obj[prop] = lerp(obj[prop], target, k); }
+    // settle legs first
+    L(c.hipL.rotation, 'x', 0); L(c.hipR.rotation, 'x', 0);
+    L(c.kneeL.rotation, 'x', 0.05); L(c.kneeR.rotation, 'x', 0.05);
+    L(c.rig.position, 'y', 0);
+    if (name === 'wave') {
+      L(c.shR.rotation, 'x', -2.5); L(c.shR.rotation, 'z', 0.5 + Math.sin(t * 11) * 0.45);
+      L(c.shL.rotation, 'x', -0.15);
+      c.headG.rotation.z = Math.sin(t * 5) * 0.06;
+    } else if (name === 'bow') {
+      var b = Math.sin(Math.PI * Math.min(1, t / dur)); // down and back up
+      c.rig.rotation.x = b * 0.62;
+      L(c.shL.rotation, 'x', -0.2 + b * 0.35); L(c.shR.rotation, 'x', -0.2 + b * 0.35);
+      c.headG.rotation.x = b * 0.3;
+    } else if (name === 'laugh') {
+      c.rig.position.y = Math.abs(Math.sin(t * 9)) * 0.13;
+      c.headG.rotation.x = -0.28;
+      L(c.shL.rotation, 'x', -0.9); L(c.shR.rotation, 'x', -0.9);
+      L(c.shL.rotation, 'z', -0.35); L(c.shR.rotation, 'z', 0.35);
+    } else if (name === 'cheer') {
+      L(c.shL.rotation, 'x', -2.85); L(c.shR.rotation, 'x', -2.85);
+      L(c.shL.rotation, 'z', -0.35); L(c.shR.rotation, 'z', 0.35);
+      c.rig.position.y = Math.abs(Math.sin(t * 7)) * 0.2;
+      c.headG.rotation.x = -0.15;
+    } else if (name === 'shy') {
+      c.headG.rotation.x = 0.38; c.headG.rotation.z = Math.sin(t * 3) * 0.05;
+      L(c.shL.rotation, 'x', -0.55); L(c.shR.rotation, 'x', -0.55);
+      L(c.shL.rotation, 'z', -0.5); L(c.shR.rotation, 'z', 0.5);
+      c.rig.rotation.x = 0.08;
+    } else if (name === 'loveyou') { // arms up in a heart arc
+      L(c.shL.rotation, 'x', -2.3); L(c.shR.rotation, 'x', -2.3);
+      L(c.shL.rotation, 'z', -0.75); L(c.shR.rotation, 'z', 0.75);
+      c.headG.rotation.z = Math.sin(t * 4) * 0.08;
+      var p = 1 + Math.sin(t * 6) * 0.03;
+      c.torso.scale.set(p, p, p);
+    }
+    if (name !== 'bow' && name !== 'shy') c.rig.rotation.x = lerp(c.rig.rotation.x, 0, k);
+    if (name !== 'laugh' && name !== 'cheer' && name !== 'shy' && name !== 'bow') c.headG.rotation.x = lerp(c.headG.rotation.x, 0, k);
+  }
+
+  /* ---- hug sequence: walk together, embrace, hearts, release ---- */
+  var hugState = null; // {t, dur}
+  var heartTex = null;
+  function getHeartTex() {
+    if (heartTex) return heartTex;
+    var c = document.createElement('canvas'); c.width = c.height = 64;
+    var g = c.getContext('2d');
+    g.fillStyle = '#ff6b8a';
+    g.beginPath();
+    g.moveTo(32, 54);
+    g.bezierCurveTo(4, 30, 6, 10, 20, 10);
+    g.bezierCurveTo(28, 10, 32, 16, 32, 22);
+    g.bezierCurveTo(32, 16, 36, 10, 44, 10);
+    g.bezierCurveTo(58, 10, 60, 30, 32, 54);
+    g.fill();
+    heartTex = new THREE.CanvasTexture(c);
+    return heartTex;
+  }
+  var heartSprites = [];
+  function spawnHearts(x, y, z, n) {
+    for (var i = 0; i < n; i++) {
+      var sp = new THREE.Sprite(new THREE.SpriteMaterial({
+        map: getHeartTex(), transparent: true, depthWrite: false, opacity: 0.95
+      }));
+      var s = 0.5 + Math.random() * 0.5;
+      sp.scale.set(s, s, 1);
+      sp.position.set(x + (Math.random() - 0.5) * 1.6, y + Math.random() * 0.8, z + (Math.random() - 0.5) * 1.6);
+      sp.userData = { vy: 1.2 + Math.random() * 0.9, life: 2.6, age: 0 };
+      scene.add(sp);
+      heartSprites.push(sp);
+    }
+  }
+  function updateHearts(dt) {
+    for (var i = heartSprites.length - 1; i >= 0; i--) {
+      var sp = heartSprites[i], u = sp.userData;
+      u.age += dt;
+      sp.position.y += u.vy * dt;
+      sp.material.opacity = Math.max(0, 0.95 * (1 - u.age / u.life));
+      if (u.age >= u.life) {
+        scene.remove(sp); sp.material.dispose();
+        heartSprites.splice(i, 1);
+      }
+    }
+  }
+  function startHug() {
+    if (hugState) return;
+    hugState = { t: 0, dur: 4.2 };
+    var mx = (player.position.x + partner.position.x) / 2;
+    var mz = (player.position.z + partner.position.z) / 2;
+    var my = (player.position.y + partner.position.y) / 2;
+    spawnHearts(mx, my + 2.6, mz, 8);
+  }
+  function updateHug(dt) {
+    if (!hugState) return;
+    hugState.t += dt;
+    if (hugState.t >= hugState.dur) { hugState = null; return; }
+    var t = hugState.t;
+    // both face each other and lean into the embrace
+    var dx = partner.position.x - player.position.x, dz = partner.position.z - player.position.z;
+    var d = Math.hypot(dx, dz) || 0.001;
+    if (d > 1.35 && t < 1.2) { // step together first
+      var step = Math.min(d - 1.35, dt * 3);
+      player.position.x += dx / d * step * 0.5; player.position.z += dz / d * step * 0.5;
+      partner.position.x -= dx / d * step * 0.5; partner.position.z -= dz / d * step * 0.5;
+      updateCharacterAnim(playerRig, dt, t, true, 3);
+      updateCharacterAnim(partnerRig, dt, t, true, 3);
+      return;
+    }
+    var yawP = Math.atan2(dx, dz), yawQ = Math.atan2(-dx, -dz);
+    player.rotation.y = yawP; partner.rotation.y = yawQ;
+    [playerRig, partnerRig].forEach(function (c) {
+      var k = 1 - Math.exp(-dt * 8);
+      c.hipL.rotation.x = lerp(c.hipL.rotation.x, 0, k);
+      c.hipR.rotation.x = lerp(c.hipR.rotation.x, 0, k);
+      c.kneeL.rotation.x = lerp(c.kneeL.rotation.x, 0.08, k);
+      c.kneeR.rotation.x = lerp(c.kneeR.rotation.x, 0.08, k);
+      c.shL.rotation.x = lerp(c.shL.rotation.x, -1.05, k); // arms around each other
+      c.shR.rotation.x = lerp(c.shR.rotation.x, -1.05, k);
+      c.shL.rotation.z = lerp(c.shL.rotation.z, -0.45, k);
+      c.shR.rotation.z = lerp(c.shR.rotation.z, 0.45, k);
+      c.lean = lerp(c.lean, 0.12, k); c.rig.rotation.x = c.lean;
+      c.headG.rotation.z = lerp(c.headG.rotation.z, 0.12, k);
+    });
+    if (Math.random() < dt * 2.2) {
+      spawnHearts((player.position.x + partner.position.x) / 2,
+        (player.position.y + partner.position.y) / 2 + 2.8,
+        (player.position.z + partner.position.z) / 2, 1);
+    }
+  }
+
   /* ---- gift visual: floating gift above the partner's head ---- */
   var giftSprite = null, giftTimer = 0;
   function showGift(emoji) {
