@@ -457,6 +457,16 @@ function init(canvasId, opts) {
       var p = BUILD_PLOTS_A[i];
       if (Math.hypot(x - p.x, z - p.z) < 8) return true;
       if (Math.hypot(x + p.x, z - p.z) < 8) return true;
+      // keep the doorway approach clear: no trees in a corridor in front of each door
+      for (var s = 0; s < 2; s++) {
+        var bx = s ? -p.x : p.x, bz = p.z;
+        var ccx = s ? ISL_B.cx : ISL_A.cx;
+        var fx = ccx - bx, fz = 0 - bz; // door faces the island center
+        var fl = Math.hypot(fx, fz) || 1; fx /= fl; fz /= fl;
+        var dx = x - bx, dz = z - bz;
+        var along = dx * fx + dz * fz, lat = Math.abs(dx * fz - dz * fx);
+        if (along > -3 && along < 17 && lat < 7.5) return true;
+      }
     }
     return false;
   }
@@ -1635,6 +1645,7 @@ function init(canvasId, opts) {
       playerYaw = targetYaw = Math.PI; player.rotation.y = Math.PI;
       orbit.yaw = Math.PI;
       insideRoomObj = b.roomObj || null;
+      camDistSm = 6.5; // snap the camera inside: no fly-through, room fills the screen
       movementLocked = false;
     });
   }
@@ -1647,6 +1658,7 @@ function init(canvasId, opts) {
       playerYaw = targetYaw = yw; player.rotation.y = yw;
       orbit.yaw = yw;
       insideRoomObj = null;
+      camDistSm = orbit.dist; // snap back out
       movementLocked = false;
     });
   }
@@ -2120,6 +2132,10 @@ function init(canvasId, opts) {
   var EMOTE_DUR = 2.4;
   function playEmoteOn(rig, name) {
     rig.emote = { name: name, t: 0, dur: EMOTE_DUR };
+    if (name === 'loveyou' && rig.group) { // big love emoji pops above the head
+      var p = rig.group.position;
+      spawnLoveEmoji(p.x, p.y + 2.7, p.z);
+    }
   }
   function applyEmotePose(c, name, t, dur) {
     var k = 1 - Math.exp(-0.16 * 10);
@@ -2194,6 +2210,26 @@ function init(canvasId, opts) {
       scene.add(sp);
       heartSprites.push(sp);
     }
+  }
+  var loveEmojiTex = null;
+  function getLoveEmojiTex() {
+    if (loveEmojiTex) return loveEmojiTex;
+    var c = document.createElement('canvas'); c.width = c.height = 128;
+    var g = c.getContext('2d');
+    g.font = '100px serif'; g.textAlign = 'center'; g.textBaseline = 'middle';
+    g.fillText('❤️', 64, 70);
+    loveEmojiTex = new THREE.CanvasTexture(c);
+    return loveEmojiTex;
+  }
+  function spawnLoveEmoji(x, y, z) { // big ❤️ for the love emote (floats + fades like hearts)
+    var sp = new THREE.Sprite(new THREE.SpriteMaterial({
+      map: getLoveEmojiTex(), transparent: true, depthWrite: false, opacity: 1
+    }));
+    sp.scale.set(1.7, 1.7, 1);
+    sp.position.set(x, y, z);
+    sp.userData = { vy: 1.5, life: 2.2, age: 0 };
+    scene.add(sp);
+    heartSprites.push(sp);
   }
   function updateHearts(dt) {
     for (var i = heartSprites.length - 1; i >= 0; i--) {
@@ -2595,6 +2631,59 @@ function init(canvasId, opts) {
       vertexColors: true, roughness: 0.4, emissive: 0xffc46b, emissiveIntensity: 0.4
     });
     rotor.add(new THREE.Mesh(mergeParts(hkp), hubMat)); windowMats.push(hubMat);
+    /* illuminated retro LOVE board at the hub (static: child of grp, the rotor spins around it) */
+    (function buildLoveBoard() {
+      var c = document.createElement('canvas'); c.width = 512; c.height = 320;
+      var g2 = c.getContext('2d');
+      g2.fillStyle = '#2a1420'; g2.fillRect(0, 0, 512, 320);
+      g2.strokeStyle = '#6b2a3a'; g2.lineWidth = 14; g2.strokeRect(10, 10, 492, 300);
+      function heartPath(sz, oy) {
+        var x = 256, y = oy;
+        g2.beginPath();
+        g2.moveTo(x, y + sz * 0.9);
+        g2.bezierCurveTo(x - sz * 1.4, y, x - sz * 0.7, y - sz * 0.9, x, y - sz * 0.25);
+        g2.bezierCurveTo(x + sz * 0.7, y - sz * 0.9, x + sz * 1.4, y, x, y + sz * 0.9);
+        g2.closePath();
+      }
+      g2.shadowColor = '#ff4d6d'; g2.shadowBlur = 42;
+      g2.fillStyle = '#ff5c7a';
+      heartPath(72, 118); g2.fill(); g2.fill();
+      g2.shadowColor = '#ffb46b'; g2.shadowBlur = 26;
+      g2.fillStyle = '#ffe9b8';
+      g2.font = 'bold 66px Georgia, serif'; g2.textAlign = 'center';
+      g2.fillText('L O V E', 256, 272);
+      var boardTex = new THREE.CanvasTexture(c);
+      var boardMat = new THREE.MeshStandardMaterial({
+        map: boardTex, emissive: 0xffffff, emissiveMap: boardTex,
+        emissiveIntensity: 0.55, roughness: 0.6
+      });
+      windowMats.push(boardMat); // glows warm at night
+      var bulbMat = new THREE.MeshStandardMaterial({
+        color: 0xffe0a0, emissive: 0xffb46b, emissiveIntensity: 1.2, roughness: 0.4
+      });
+      windowMats.push(bulbMat);
+      [1.2, -1.2].forEach(function (bz) {
+        var bg = new THREE.Group();
+        var frame = new THREE.Mesh(new THREE.BoxGeometry(5.6, 3.8, 0.16), trimMat);
+        frame.castShadow = true; bg.add(frame);
+        var face = new THREE.Mesh(new THREE.PlaneGeometry(5.2, 3.4), boardMat);
+        face.position.z = bz > 0 ? 0.1 : -0.1;
+        if (bz < 0) face.rotation.y = Math.PI;
+        bg.add(face);
+        for (var bi = 0; bi < 16; bi++) { // marquee bulbs around the frame
+          var t = bi / 16, bx2, by2;
+          if (t < 0.25) { bx2 = -2.8 + t * 4 * 5.6; by2 = 1.9; }
+          else if (t < 0.5) { bx2 = 2.8; by2 = 1.9 - (t - 0.25) * 4 * 3.8; }
+          else if (t < 0.75) { bx2 = 2.8 - (t - 0.5) * 4 * 5.6; by2 = -1.9; }
+          else { bx2 = -2.8; by2 = -1.9 + (t - 0.75) * 4 * 3.8; }
+          var bulb = new THREE.Mesh(new THREE.SphereGeometry(0.14, 8, 6), bulbMat);
+          bulb.position.set(bx2, by2, bz > 0 ? 0.14 : -0.14);
+          bg.add(bulb);
+        }
+        bg.position.set(0, H, bz);
+        grp.add(bg);
+      });
+    })();
     /* gondolas: one InstancedMesh; children of the rotor so they orbit yet stay upright */
     var gparts = [];
     tubePart(0, 0, 0, 0, -1.0, 0, 0.12, 0x3a3a44, gparts);                 // hanger
@@ -2632,7 +2721,7 @@ function init(canvasId, opts) {
     colliders.push({ x: wx, z: wz, r: 8.5 }); // solid structure; prompt stays reachable
     var boardX = wx, boardZ = wz - 8.8;       // booth front (yaw=PI flips local +z)
     var w = {
-      cx: wx, cz: wz, baseY: gy, rotor: rotor, angle: seedAngle, spin: 0.045,
+      cx: wx, cz: wz, baseY: gy, rotor: rotor, gond: gond, angle: seedAngle, spin: 0.045,
       riding: false, rideIdx: 0, hubLight: hubLight,
       boardX: boardX, boardZ: boardZ, exitYaw: Math.PI
     };
@@ -2869,13 +2958,22 @@ function init(canvasId, opts) {
       w.angle += w.spin * dt;
       w.rotor.rotation.z = w.angle;
       w.hubLight.intensity = nightLevel * 16;
+      /* gondolas hang from pivots: counter-rotate the rotor's spin so cabins stay upright */
+      for (var gj = 0; gj < 8; gj++) {
+        var ga = gj * Math.PI / 4;
+        _dummy.position.set(Math.cos(ga) * WHEEL_R, Math.sin(ga) * WHEEL_R, 0);
+        _dummy.rotation.set(0, 0, -w.angle);
+        _dummy.scale.set(1, 1, 1);
+        _dummy.updateMatrix();
+        w.gond.setMatrixAt(gj, _dummy.matrix);
+      }
+      w.gond.instanceMatrix.needsUpdate = true;
       if (w.riding) { // carry the rider in their gondola (yaw=PI: x flips)
         var a = w.angle + w.rideIdx * Math.PI / 4;
         var lx = Math.cos(a) * WHEEL_R, ly = Math.sin(a) * WHEEL_R;
         var wy = w.baseY + WHEEL_H + ly;
-        player.position.set(w.cx - lx, wy - 3.41, w.cz); // feet on the cabin floor
-        var hyaw = Math.atan2(-lx, 0.001); // face outward
-        playerYaw = targetYaw = hyaw; player.rotation.y = hyaw;
+        player.position.set(w.cx - lx, wy - 3.41, w.cz + 0.2); // feet on the cabin floor, butt back on the bench
+        playerYaw = targetYaw = Math.PI; player.rotation.y = Math.PI; // sit on the bench: back on the backrest, facing the plaza side
         applySitPose(playerRig, dt, -0.84); // hips on the bench seat
       }
     }
@@ -2888,6 +2986,56 @@ function init(canvasId, opts) {
     if (sitting) fireLight.intensity += Math.sin(t * 6.3) * 2.5; // warmth pulse
   }
 
+  /* ---------------- homely utility poles + sagging wires ---------------- */
+  var poleWoodMat = new THREE.MeshStandardMaterial({ color: 0x6b4a2e, roughness: 1 });
+  var wireMat = new THREE.MeshStandardMaterial({ color: 0x232326, roughness: 0.85 });
+  function buildPowerLines() {
+    var runs = [
+      [[-84, -6], [-76, -14], [-68, -20]],
+      [[-84, -6], [-96, -8], [-104, -14]],
+      [[84, -6], [76, -14], [68, -20]],
+      [[84, -6], [96, -8], [104, -14]]
+    ];
+    var seen = {}, poleList = [];
+    runs.forEach(function (run) {
+      run.forEach(function (pt) {
+        var k = pt[0] + ',' + pt[1];
+        if (!seen[k]) { seen[k] = true; poleList.push(pt); }
+      });
+    });
+    var poleGeos = [], wireGeos = [], topAt = {}, ARM_Y = 7.4;
+    poleList.forEach(function (pt) {
+      var gy = groundHeight(pt[0], pt[1]);
+      poleGeos.push(part(GEO.cyl, pt[0], gy + 2.1, pt[1], 0, 0, 0, 0.62, 4.2, 0.62, [1, 1])); // tapered pole
+      poleGeos.push(part(GEO.cyl, pt[0], gy + 6.2, pt[1], 0, 0, 0, 0.42, 4.2, 0.42, [1, 1]));
+      poleGeos.push(part(GEO.box, pt[0], gy + ARM_Y, pt[1], 0, 0, 0, 2.6, 0.18, 0.18, [1, 1])); // crossarm
+      poleGeos.push(part(GEO.cyl, pt[0] - 1.1, gy + ARM_Y + 0.2, pt[1], 0, 0, 0, 0.16, 0.32, 0.16, [1, 1])); // insulators
+      poleGeos.push(part(GEO.cyl, pt[0] + 1.1, gy + ARM_Y + 0.2, pt[1], 0, 0, 0, 0.16, 0.32, 0.16, [1, 1]));
+      topAt[pt[0] + ',' + pt[1]] = [[pt[0] - 1.1, gy + ARM_Y + 0.36, pt[1]], [pt[0] + 1.1, gy + ARM_Y + 0.36, pt[1]]];
+      colliders.push({ x: pt[0], z: pt[1], r: 0.7 }); // solid pole
+    });
+    runs.forEach(function (run) {
+      for (var i = 0; i < run.length - 1; i++) {
+        var t0 = topAt[run[i][0] + ',' + run[i][1]], t1 = topAt[run[i + 1][0] + ',' + run[i + 1][1]];
+        for (var w = 0; w < 2; w++) {
+          var p0 = t0[w], p1 = t1[w];
+          var sag = Math.hypot(p1[0] - p0[0], p1[2] - p0[2]) * 0.055;
+          var curve = new THREE.QuadraticBezierCurve3(
+            new THREE.Vector3(p0[0], p0[1], p0[2]),
+            new THREE.Vector3((p0[0] + p1[0]) / 2, (p0[1] + p1[1]) / 2 - sag, (p0[2] + p1[2]) / 2),
+            new THREE.Vector3(p1[0], p1[1], p1[2]));
+          wireGeos.push(new THREE.TubeGeometry(curve, 14, 0.035, 5, false).toNonIndexed());
+        }
+      }
+    });
+    if (poleGeos.length) {
+      var poleMesh = new THREE.Mesh(mergeGeos(poleGeos), poleWoodMat);
+      poleMesh.castShadow = true;
+      registerChunk(poleMesh, 0, -12);
+    }
+    if (wireGeos.length) registerChunk(new THREE.Mesh(mergeGeos(wireGeos), wireMat), 0, -12);
+  }
+
   /* build all Phase 4 objects (mirrored across islands) */
   pierRects.length = 0; // reset on re-init (module-level walk list)
   buildSkyWheel(WHEEL_A, 0.6);
@@ -2896,6 +3044,7 @@ function init(canvasId, opts) {
   buildDock(DOCK_B, 77);
   buildCycleStand(STAND_A, 0);
   buildCycleStand(STAND_B, 1);
+  buildPowerLines(); // homely utility poles + sagging wires
 
   /* ---------------- input: keys + touch joystick + mouse orbit ---------- */
   var keys = {};
@@ -3182,7 +3331,7 @@ function init(canvasId, opts) {
       orbit.yaw += dyaw * (1 - Math.exp(-dt * 1.6));
     }
     var pzn = zoneAt(player.position.x, player.position.z); // Phase 2 interiors
-    var wantD = pzn ? Math.min(orbit.dist, 11) : orbit.dist;
+    var wantD = pzn ? Math.min(orbit.dist, 6.5) : orbit.dist; // interiors: camera stays inside the room
     camDistSm = lerp(camDistSm, wantD, 1 - Math.exp(-dt * 3));
     var cp = Math.cos(orbit.pitch), sp = Math.sin(orbit.pitch);
     var fx = -Math.sin(orbit.yaw) * cp, fz = -Math.cos(orbit.yaw) * cp;
@@ -3194,6 +3343,11 @@ function init(canvasId, opts) {
     /* keep camera above terrain (or room floor inside interiors) */
     var minY = pzn ? (pzn.y + 1.2) : Math.max(groundHeight(_camWant.x, _camWant.z) + 2.2, 3.2);
     if (_camWant.y < minY) _camWant.y = minY;
+    if (pzn) { // clamp the camera inside the room: interiors fill the screen, no dollhouse view, no wall clipping
+      _camWant.x = clamp(_camWant.x, pzn.x0 + 0.9, pzn.x1 - 0.9);
+      _camWant.z = clamp(_camWant.z, pzn.z0 + 0.9, pzn.z1 - 0.9);
+      _camWant.y = clamp(_camWant.y, pzn.y + 1.1, pzn.y + 3.5);
+    }
     var k = 1 - Math.exp(-dt * 4.5);
     camera.position.lerp(_camWant, k);
     camera.lookAt(_camTarget);
