@@ -414,6 +414,103 @@ function openWatch() {
   };
 }
 
+/* ---------------- Island decoration picker ---------------- */
+var DECOR_TYPES = [
+  { id: 'flower', icon: '🌸', name: 'Flower' },
+  { id: 'grass', icon: '🌿', name: 'Grass tuft' },
+  { id: 'mushroom', icon: '🍄', name: 'Mushroom' },
+  { id: 'stone', icon: '🪨', name: 'Stone' },
+  { id: 'lantern', icon: '🏮', name: 'Lantern' }
+];
+var decorMode = null; // type being placed, or null
+function openDecorate() {
+  var m = el('div', 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(20,10,14,.72);backdrop-filter:blur(4px);' + BASE_FONT);
+  var html = '<div style="display:grid;grid-template-columns:1fr 1fr 1fr;gap:10px;margin:16px 0;">';
+  DECOR_TYPES.forEach(function (dt) {
+    html += '<button data-decor="' + dt.id + '" style="background:rgba(0,0,0,.3);border:1px solid rgba(245,200,110,.3);' +
+      'border-radius:14px;padding:14px 8px;cursor:pointer;color:#f4e8d8;font-family:inherit;text-align:center;">' +
+      '<div style="font-size:32px;margin-bottom:4px;">' + dt.icon + '</div>' +
+      '<div style="font-size:12px;">' + dt.name + '</div></button>';
+  });
+  html += '</div>';
+  m.innerHTML =
+    '<div style="background:linear-gradient(180deg,#3a2126,#241318);border:1px solid rgba(245,200,110,.4);' +
+    'border-radius:20px;padding:28px 30px;max-width:420px;width:90%;color:#f4e8d8;text-align:center;' +
+    'box-shadow:0 16px 60px rgba(0,0,0,.6);max-height:86vh;overflow-y:auto;">' +
+    '<div style="font-size:13px;letter-spacing:.3em;color:rgba(245,200,110,.7);margin-bottom:6px;">★ DECORATE ★</div>' +
+    '<div style="font-size:14px;color:rgba(244,232,216,.7);margin-bottom:4px;">Pick something, then tap the ground<br>where you want it on your island</div>' +
+    html +
+    '<button id="ks-decor-clear" style="margin:8px 0;padding:8px 16px;border:1px solid rgba(200,100,100,.5);' +
+    'border-radius:10px;background:transparent;color:#e88;font-family:inherit;font-size:13px;cursor:pointer;">Clear all</button><br>' +
+    '<button id="ks-decor-close" style="background:none;border:none;color:rgba(244,232,216,.45);' +
+    'font-family:inherit;font-size:13px;cursor:pointer;">close</button></div>';
+  document.body.appendChild(m);
+  m.querySelector('#ks-decor-close').onclick = function () { document.body.removeChild(m); };
+  m.addEventListener('click', function (e) { if (e.target === m) document.body.removeChild(m); });
+  m.querySelector('#ks-decor-clear').onclick = function () {
+    if (confirm('Remove all your decorations?')) {
+      try { if (worldApi && worldApi.clearDecorations) worldApi.clearDecorations(); } catch (e) {}
+      toast('Decorations cleared');
+      document.body.removeChild(m);
+    }
+  };
+  m.querySelectorAll('[data-decor]').forEach(function (b) {
+    b.onclick = function () {
+      decorMode = b.getAttribute('data-decor');
+      document.body.removeChild(m);
+      var dt = DECOR_TYPES.find(function (x) { return x.id === decorMode; });
+      toast('Tap the ground to place ' + (dt ? dt.icon + ' ' + dt.name : 'it') + ' — tap ✏️ to stop');
+      showDecorBanner();
+    };
+  });
+}
+var decorBanner = null;
+function showDecorBanner() {
+  if (decorBanner) return;
+  decorBanner = el('div', 'position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:125;' + BASE_FONT +
+    'background:rgba(46,26,14,.94);border:1px solid rgba(255,200,120,.5);color:#ffe9b8;' +
+    'border-radius:999px;padding:10px 18px;font-size:14px;display:flex;gap:12px;align-items:center;' +
+    'box-shadow:0 6px 20px rgba(0,0,0,.5);',
+    '<span>🌸 tap PLACE where you stand</span>' +
+    '<button id="ks-decor-place" style="padding:6px 14px;border:none;border-radius:10px;cursor:pointer;' +
+    'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:13px;">PLACE</button>' +
+    '<button id="ks-decor-stop" style="background:none;border:none;color:#ffe9b8;' +
+    'font-size:16px;cursor:pointer;">✏️</button>');
+  document.body.appendChild(decorBanner);
+  decorBanner.querySelector('#ks-decor-stop').onclick = stopDecorMode;
+  decorBanner.querySelector('#ks-decor-place').onclick = function () {
+    if (!decorMode) return;
+    try {
+      var pos = worldApi.getPlayerPos();
+      if (pos && worldApi.addDecoration) {
+        // Place slightly in front of the player
+        var yaw = worldApi.getPlayerYaw ? worldApi.getPlayerYaw() : 0;
+        var px = pos.x + Math.sin(yaw) * 2;
+        var pz = pos.z + Math.cos(yaw) * 2;
+        worldApi.addDecoration(decorMode, px, pz);
+        addDreamPoints(2, 'decorated');
+      }
+    } catch (e) {}
+  };
+}
+function stopDecorMode() {
+  decorMode = null;
+  if (decorBanner) { document.body.removeChild(decorBanner); decorBanner = null; }
+}
+// Hook into the world's tap-to-place: the world calls this on ground taps
+function onGroundTap(x, z) {
+  if (!decorMode) return false;
+  try {
+    if (worldApi && worldApi.addDecoration) {
+      worldApi.addDecoration(decorMode, x, z);
+      addDreamPoints(2, 'decorated');
+      return true;
+    }
+  } catch (e) {}
+  return false;
+}
+
 /* ---------------- M8: Miss You button ---------------- */
 function sendMissYou() {
   // Haptic
@@ -1258,12 +1355,35 @@ var BUILDING_INFO = {
   shop: { icon: '🛍️', name: 'Shop', blurb: 'Little treasures for your island life.' },
   bookshop: { icon: '📖', name: 'Bookshop', blurb: 'Stories, letters, and quiet corners.' },
   cottage: { icon: '💭', name: 'Memory Cottage', blurb: 'Keep your favorite moments here.' },
-  house: { icon: '🏠', name: "Couple's House", blurb: 'Your cozy corner of the island.' }
+  house: { icon: '🏠', name: "Couple's House", blurb: 'Your cozy corner of the island.' },
+  barn: { icon: '🎃', name: 'Halloween Barn', blurb: 'Kanavu Autumn Barn — the Halloween Barn Festival is on! Grab some hot cider and pick a pumpkin.' }
 };
+/* Building rename (per-island, stored locally) */
+var BNAME_KEY = 'kanavu-building-names-v1';
+function getBuildingNames() {
+  try {
+    var raw = localStorage.getItem(BNAME_KEY);
+    return raw ? JSON.parse(raw) : {};
+  } catch (e) { return {}; }
+}
+function getBuildingName(type, side) {
+  var names = getBuildingNames();
+  var key = (side || 'A') + '-' + type;
+  return names[key] || null;
+}
+function setBuildingName(type, side, name) {
+  var names = getBuildingNames();
+  var key = (side || 'A') + '-' + type;
+  if (name) names[key] = name;
+  else delete names[key];
+  try { localStorage.setItem(BNAME_KEY, JSON.stringify(names)); } catch (e) {}
+}
 var buildingModal = null;
-function openBuilding(type) {
+function openBuilding(type, side) {
   if (buildingModal) { document.body.removeChild(buildingModal); buildingModal = null; }
   var info = BUILDING_INFO[type] || { icon: '🏠', name: 'Building', blurb: '' };
+  var customName = getBuildingName(type, side);
+  var displayName = customName || info.name;
   var m = el('div', 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;' +
     'background:rgba(20,10,14,.72);backdrop-filter:blur(4px);' + BASE_FONT);
   var actions = '';
@@ -1277,16 +1397,31 @@ function openBuilding(type) {
     'box-shadow:0 16px 60px rgba(0,0,0,.6);max-height:86vh;overflow-y:auto;">' +
     '<div style="font-size:40px;margin-bottom:8px;">' + info.icon + '</div>' +
     '<div style="font-size:13px;letter-spacing:.3em;color:rgba(245,200,110,.7);margin-bottom:6px;">★ ' +
-    info.name.toUpperCase() + ' ★</div>' +
+    escHtml(displayName).toUpperCase() + ' ★</div>' +
     '<div style="font-size:15px;font-style:italic;color:rgba(244,232,216,.75);margin:12px 0 18px;line-height:1.5;">' +
     info.blurb + '</div>' +
     (actions ? '<div style="display:flex;gap:10px;justify-content:center;margin-bottom:6px;">' + actions + '</div>' : '') +
+    '<button id="ks-brename" style="margin-top:6px;background:none;border:none;color:rgba(245,200,110,.7);' +
+    'font-family:inherit;font-size:13px;cursor:pointer;">✏️ Rename</button><br>' +
     '<button id="ks-bclose" style="margin-top:10px;background:none;border:none;color:rgba(244,232,216,.45);' +
     'font-family:inherit;font-size:13px;cursor:pointer;">close</button></div>';
   document.body.appendChild(m);
   buildingModal = m;
   m.querySelector('#ks-bclose').onclick = function () {
     document.body.removeChild(m); buildingModal = null;
+  };
+  m.querySelector('#ks-brename').onclick = function () {
+    var current = getBuildingName(type, side) || info.name;
+    var next = prompt('Name this ' + info.name + ':', current);
+    if (next !== null) {
+      next = next.trim().slice(0, 24);
+      setBuildingName(type, side, next || null);
+      toast(next ? '✏️ Renamed to "' + next + '"' : '✏️ Name reset');
+      document.body.removeChild(m); buildingModal = null;
+      openBuilding(type, side);
+      // Refresh the prompt label in the world
+      try { if (worldApi && worldApi.refreshBuildingLabels) worldApi.refreshBuildingLabels(); } catch (e) {}
+    }
   };
   m.addEventListener('click', function (e) { if (e.target === m) { document.body.removeChild(m); buildingModal = null; } });
   var sleepBtn = m.querySelector('#ks-bsleep');
@@ -1393,6 +1528,12 @@ function init(w, m) {
   gameFab.title = 'Games';
   gameFab.onclick = function () { openGames(); };
   bar.appendChild(gameFab);
+  // Decorate button
+  var decorFab = el('button', btnCss(), '🌸');
+  decorFab.setAttribute('aria-label', 'Decorate island');
+  decorFab.title = 'Decorate';
+  decorFab.onclick = function () { openDecorate(); };
+  bar.appendChild(decorFab);
   document.body.appendChild(bar);
 
   // M3: show Today on app open (once per day)
@@ -1528,5 +1669,5 @@ function init(w, m) {
   });
 }
 
-window.KanavuSocial = { init: init, openTheatre: openTheatre, openBuilding: openBuilding, toast: toast, version: 'social-1.0' };
+window.KanavuSocial = { init: init, openTheatre: openTheatre, openBuilding: openBuilding, toast: toast, BUILDING_INFO: BUILDING_INFO, version: 'social-2.0' };
 })();

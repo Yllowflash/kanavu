@@ -1108,6 +1108,291 @@ function init(canvasId, opts) {
     return m;
   }
 
+  /* ---------------- Halloween Barn (seasonal, beside bridge entrance) ---------------- */
+  function makeTextSprite(text, opts) {
+    opts = opts || {};
+    var c = document.createElement('canvas');
+    c.width = 512; c.height = 128;
+    var g = c.getContext('2d');
+    g.fillStyle = opts.bg || '#3a2418';
+    g.fillRect(0, 0, 512, 128);
+    g.strokeStyle = opts.border || '#f5a86e';
+    g.lineWidth = 6;
+    g.strokeRect(8, 8, 496, 112);
+    g.fillStyle = opts.fg || '#ffe9b8';
+    g.font = 'bold 42px Georgia, serif';
+    g.textAlign = 'center';
+    g.textBaseline = 'middle';
+    g.fillText(text, 256, 64);
+    var t = new THREE.CanvasTexture(c);
+    if ('colorSpace' in t) t.colorSpace = THREE.SRGBColorSpace;
+    var m = new THREE.Mesh(
+      new THREE.PlaneGeometry(opts.w || 6, (opts.w || 6) * 0.25),
+      new THREE.MeshBasicMaterial({ map: t })
+    );
+    return m;
+  }
+  function buildHalloweenBarn(bx, bz, yaw) {
+    var g = new THREE.Group();
+    var gy = groundHeight(bx, bz);
+    // Main barn body (wooden, dark red-brown)
+    var woodMat = new THREE.MeshStandardMaterial({ color: 0x6b3a2a, roughness: 0.85 });
+    var woodDark = new THREE.MeshStandardMaterial({ color: 0x4a2a1e, roughness: 0.9 });
+    var body = new THREE.Mesh(new THREE.BoxGeometry(10, 6, 8), woodMat);
+    body.position.y = 3;
+    body.castShadow = true; body.receiveShadow = true;
+    g.add(body);
+    // Gambrel roof (two slopes)
+    var roofMat = new THREE.MeshStandardMaterial({ color: 0x3a2a20, roughness: 0.9 });
+    var roof1 = new THREE.Mesh(new THREE.BoxGeometry(11, 0.3, 4.5), roofMat);
+    roof1.position.set(0, 7.2, -1.8);
+    roof1.rotation.x = 0.5;
+    roof1.castShadow = true;
+    g.add(roof1);
+    var roof2 = new THREE.Mesh(new THREE.BoxGeometry(11, 0.3, 4.5), roofMat);
+    roof2.position.set(0, 7.2, 1.8);
+    roof2.rotation.x = -0.5;
+    roof2.castShadow = true;
+    g.add(roof2);
+    // Roof ridge cap
+    var ridge = new THREE.Mesh(new THREE.BoxGeometry(11, 0.4, 0.6), woodDark);
+    ridge.position.y = 8.6;
+    g.add(ridge);
+    // Front gable (triangle)
+    var gableShape = new THREE.Shape();
+    gableShape.moveTo(-5, 0); gableShape.lineTo(5, 0); gableShape.lineTo(0, 2.6); gableShape.closePath();
+    var gableGeo = new THREE.ExtrudeGeometry(gableShape, { depth: 0.3, bevelEnabled: false });
+    var gable = new THREE.Mesh(gableGeo, woodMat);
+    gable.position.set(0, 6, 3.85);
+    g.add(gable);
+    // Glowing windows
+    var winMat = new THREE.MeshBasicMaterial({ color: 0xffd98a });
+    var win1 = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), winMat);
+    win1.position.set(-2.5, 4.5, 4.02);
+    g.add(win1);
+    var win2 = new THREE.Mesh(new THREE.PlaneGeometry(1.6, 1.6), winMat);
+    win2.position.set(2.5, 4.5, 4.02);
+    g.add(win2);
+    // Window frames
+    var frameMat = new THREE.MeshStandardMaterial({ color: 0x2a1a12, roughness: 0.8 });
+    [[-2.5], [2.5]].forEach(function (wx) {
+      var f = new THREE.Mesh(new THREE.BoxGeometry(1.9, 1.9, 0.1), frameMat);
+      f.position.set(wx[0], 4.5, 3.98);
+      g.add(f);
+    });
+    // Big barn doors (front)
+    var doorMat = new THREE.MeshStandardMaterial({ color: 0x4a2e20, roughness: 0.85 });
+    var doorL = new THREE.Mesh(new THREE.BoxGeometry(1.8, 4.2, 0.15), doorMat);
+    doorL.position.set(-1, 2.6, 4.05);
+    g.add(doorL);
+    var doorR = new THREE.Mesh(new THREE.BoxGeometry(1.8, 4.2, 0.15), doorMat);
+    doorR.position.set(1, 2.6, 4.05);
+    g.add(doorR);
+    // Porch roof (front overhang)
+    var porchRoof = new THREE.Mesh(new THREE.BoxGeometry(12, 0.25, 3), roofMat);
+    porchRoof.position.set(0, 5.2, 5.2);
+    porchRoof.rotation.x = 0.15;
+    porchRoof.castShadow = true;
+    g.add(porchRoof);
+    // Porch posts
+    var postMat = new THREE.MeshStandardMaterial({ color: 0x4a2e20, roughness: 0.85 });
+    [[-5.5], [5.5]].forEach(function (px) {
+      var post = new THREE.Mesh(new THREE.CylinderGeometry(0.18, 0.18, 5.2, 8), postMat);
+      post.position.set(px[0], 2.6, 6.5);
+      post.castShadow = true;
+      g.add(post);
+    });
+    // Signs
+    var sign1 = makeTextSprite('KANAVU AUTUMN BARN', { w: 7 });
+    sign1.position.set(0, 6.8, 4.1);
+    g.add(sign1);
+    var sign2 = makeTextSprite('KANAVU HALLOWEEN BARN FESTIVAL', { w: 8, bg: '#2a1a12', fg: '#ffb86e' });
+    sign2.position.set(0, 5.9, 4.1);
+    g.add(sign2);
+    // String lights along roof edges (glowing spheres)
+    var lightMat = new THREE.MeshBasicMaterial({ color: 0xffc86e });
+    var bulbGeo = new THREE.SphereGeometry(0.09, 6, 6);
+    for (var i = 0; i <= 20; i++) {
+      var t = i / 20;
+      // Front eave
+      var bulb = new THREE.Mesh(bulbGeo, lightMat);
+      bulb.position.set(-5 + t * 10, 6.1 + Math.sin(t * Math.PI) * 0.15, 4.15);
+      g.add(bulb);
+      // Porch edge
+      var bulb2 = new THREE.Mesh(bulbGeo, lightMat);
+      bulb2.position.set(-6 + t * 12, 5.05, 6.65);
+      g.add(bulb2);
+    }
+    // Pumpkins (orange spheres, some with faces)
+    var pumpkinMat = new THREE.MeshStandardMaterial({ color: 0xe67e22, roughness: 0.7 });
+    var pumpkinGlow = new THREE.MeshBasicMaterial({ color: 0xff9a3d });
+    var pumpkinPositions = [
+      [-6, 0, 5], [-5, 0, 6], [6, 0, 5], [5.5, 0, 6.5], [-4, 0, 7], [4, 0, 7.5],
+      [-7, 0, 3], [7, 0, 3.5], [0, 0, 8], [-3, 0, 8.5], [3, 0, 8.5]
+    ];
+    pumpkinPositions.forEach(function (pp, idx) {
+      var s = 0.5 + Math.random() * 0.35;
+      var pk = new THREE.Mesh(new THREE.SphereGeometry(s, 10, 8), idx % 3 === 0 ? pumpkinGlow : pumpkinMat);
+      pk.position.set(pp[0], s * 0.85, pp[2]);
+      pk.scale.y = 0.85;
+      pk.castShadow = true;
+      g.add(pk);
+      // Stem
+      var stem = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.3, 6),
+        new THREE.MeshStandardMaterial({ color: 0x4a6b2a, roughness: 0.9 }));
+      stem.position.set(pp[0], s * 0.85 + s * 0.85, pp[2]);
+      g.add(stem);
+    });
+    // Hay bales
+    var hayMat = new THREE.MeshStandardMaterial({ color: 0xd4a84b, roughness: 0.95 });
+    [[-7.5, 2], [7.5, 2.5], [-6.5, -1]].forEach(function (hp) {
+      var hay = new THREE.Mesh(new THREE.BoxGeometry(1.6, 1.1, 1.2), hayMat);
+      hay.position.set(hp[0], 0.55, hp[1]);
+      hay.rotation.y = Math.random() * 0.6;
+      hay.castShadow = true;
+      g.add(hay);
+    });
+    // Ghosts (floating white sprites)
+    var ghostMat = new THREE.SpriteMaterial({ color: 0xffffff, transparent: true, opacity: 0.85 });
+    for (var gi = 0; gi < 3; gi++) {
+      var ghost = new THREE.Sprite(ghostMat);
+      var gs = 0.8 + Math.random() * 0.4;
+      ghost.scale.set(gs, gs * 1.2, 1);
+      ghost.position.set(-4 + gi * 4 + Math.random(), 3.5 + Math.random() * 1.5, 5.5);
+      ghost.userData = { baseY: ghost.position.y, phase: Math.random() * Math.PI * 2 };
+      g.add(ghost);
+      if (!g.userData.ghosts) g.userData.ghosts = [];
+      g.userData.ghosts.push(ghost);
+    }
+    // Warm light from windows/door
+    var barnLight = new THREE.PointLight(0xffb86e, 25, 20, 1.8);
+    barnLight.position.set(0, 4, 6);
+    g.add(barnLight);
+    g.position.set(bx, gy, bz);
+    g.rotation.y = yaw;
+    scene.add(g);
+    // Collider
+    colliders.push({ x: bx, z: bz, r: 7 });
+    // Interactable (popup, no interior)
+    interactables.push({
+      x: bx + Math.sin(yaw) * 8, z: bz + Math.cos(yaw) * 8, r: 6.5,
+      label: '🎃 Halloween Barn',
+      action: function () {
+        if (window.KanavuSocial && window.KanavuSocial.openBuilding) {
+          window.KanavuSocial.openBuilding('barn');
+        }
+      }
+    });
+    return g;
+  }
+  var halloweenBarn = null;
+
+  /* ---------------- Island decorations (flowers, grass, etc.) ---------------- */
+  var DECOR_KEY = 'kanavu-decorations-v1';
+  var decorations = [];
+  var decorGroup = null;
+  function loadDecorations() {
+    try {
+      var raw = localStorage.getItem(DECOR_KEY);
+      decorations = raw ? JSON.parse(raw) : [];
+    } catch (e) { decorations = []; }
+  }
+  function saveDecorations() {
+    try { localStorage.setItem(DECOR_KEY, JSON.stringify(decorations)); } catch (e) {}
+  }
+  function buildDecorMesh(type) {
+    var g = new THREE.Group();
+    if (type === 'flower') {
+      // Stem + petals
+      var stem = new THREE.Mesh(new THREE.CylinderGeometry(0.04, 0.05, 0.7, 6),
+        new THREE.MeshStandardMaterial({ color: 0x4a7c3a, roughness: 0.9 }));
+      stem.position.y = 0.35;
+      g.add(stem);
+      var petalMat = new THREE.MeshStandardMaterial({
+        color: [0xff6b9d, 0xffd93d, 0xff8c42, 0xc77dff][Math.floor(Math.random() * 4)],
+        roughness: 0.7
+      });
+      for (var i = 0; i < 5; i++) {
+        var p = new THREE.Mesh(new THREE.SphereGeometry(0.12, 6, 6), petalMat);
+        var a = (i / 5) * Math.PI * 2;
+        p.position.set(Math.cos(a) * 0.14, 0.75, Math.sin(a) * 0.14);
+        p.scale.y = 0.6;
+        g.add(p);
+      }
+      var center = new THREE.Mesh(new THREE.SphereGeometry(0.09, 6, 6),
+        new THREE.MeshStandardMaterial({ color: 0xffd93d, roughness: 0.6 }));
+      center.position.y = 0.75;
+      g.add(center);
+    } else if (type === 'grass') {
+      // Grass tuft (3 blades)
+      var gm = new THREE.MeshStandardMaterial({ color: 0x5a9c4a, roughness: 0.95 });
+      for (var gi = 0; gi < 3; gi++) {
+        var blade = new THREE.Mesh(new THREE.ConeGeometry(0.09, 0.55 + Math.random() * 0.25, 5), gm);
+        blade.position.set((Math.random() - 0.5) * 0.25, 0.28, (Math.random() - 0.5) * 0.25);
+        blade.rotation.z = (Math.random() - 0.5) * 0.35;
+        g.add(blade);
+      }
+    } else if (type === 'mushroom') {
+      var cap = new THREE.Mesh(new THREE.SphereGeometry(0.22, 8, 6, 0, Math.PI * 2, 0, Math.PI / 2),
+        new THREE.MeshStandardMaterial({ color: 0xe74c3c, roughness: 0.7 }));
+      cap.position.y = 0.28;
+      g.add(cap);
+      var stalk = new THREE.Mesh(new THREE.CylinderGeometry(0.08, 0.1, 0.3, 6),
+        new THREE.MeshStandardMaterial({ color: 0xf5f0e6, roughness: 0.8 }));
+      stalk.position.y = 0.15;
+      g.add(stalk);
+      // White dots
+      for (var di = 0; di < 3; di++) {
+        var dot = new THREE.Mesh(new THREE.SphereGeometry(0.035, 5, 5),
+          new THREE.MeshBasicMaterial({ color: 0xffffff }));
+        var da = Math.random() * Math.PI * 2;
+        dot.position.set(Math.cos(da) * 0.12, 0.38, Math.sin(da) * 0.12);
+        g.add(dot);
+      }
+    } else if (type === 'stone') {
+      var rock = new THREE.Mesh(new THREE.DodecahedronGeometry(0.35 + Math.random() * 0.2, 0),
+        new THREE.MeshStandardMaterial({ color: 0x8a8a8a, roughness: 0.95 }));
+      rock.position.y = 0.25;
+      rock.rotation.set(Math.random(), Math.random() * 3, Math.random());
+      rock.scale.y = 0.7;
+      g.add(rock);
+    } else if (type === 'lantern') {
+      // Paper lantern (glows at night)
+      var post = new THREE.Mesh(new THREE.CylinderGeometry(0.05, 0.06, 1.6, 6),
+        new THREE.MeshStandardMaterial({ color: 0x4a2e20, roughness: 0.85 }));
+      post.position.y = 0.8;
+      g.add(post);
+      var lamp = new THREE.Mesh(new THREE.SphereGeometry(0.28, 10, 8),
+        new THREE.MeshStandardMaterial({ color: 0xffe9b8, emissive: 0xffb86e, emissiveIntensity: 0.6, roughness: 0.5 }));
+      lamp.position.y = 1.7;
+      g.add(lamp);
+    }
+    return g;
+  }
+  function renderDecorations() {
+    if (decorGroup) { scene.remove(decorGroup); }
+    decorGroup = new THREE.Group();
+    decorations.forEach(function (d) {
+      var mesh = buildDecorMesh(d.type);
+      var gy = groundHeight(d.x, d.z);
+      mesh.position.set(d.x, gy > -900 ? gy : 0, d.z);
+      mesh.rotation.y = d.rot || 0;
+      decorGroup.add(mesh);
+    });
+    scene.add(decorGroup);
+  }
+  function addDecoration(type, x, z) {
+    decorations.push({ type: type, x: +x.toFixed(1), z: +z.toFixed(1), rot: Math.random() * Math.PI * 2 });
+    saveDecorations();
+    renderDecorations();
+  }
+  function clearDecorations() {
+    decorations = [];
+    saveDecorations();
+    renderDecorations();
+  }
+  loadDecorations();
+
   /* ---- exterior builder (local space: front/door faces +z) ---- */
   function buildExterior(b) {
     var spec = BTYPES[b.type];
@@ -1308,17 +1593,21 @@ function init(canvasId, opts) {
     interactables.push({
       x: b.x + b.fx * promptD, z: b.z + b.fz * promptD, r: 6.5,
       label: spec.icon + ' ' + spec.name,
+      buildingType: b.type, buildingSide: b.side,
       action: function () {
         if (b.type === 'theatre' && window.KanavuSocial && window.KanavuSocial.openTheatre) {
           window.KanavuSocial.openTheatre();
         } else if (window.KanavuSocial && window.KanavuSocial.openBuilding) {
-          window.KanavuSocial.openBuilding(b.type); // popup pattern for every building; no interiors
+          window.KanavuSocial.openBuilding(b.type, b.side); // popup pattern for every building; no interiors
         }
       }
     });
   }
 
   BUILDINGS.forEach(function (b) { buildExterior(b); });
+  /* Halloween Barn beside the bridge entrance (island A side) */
+  halloweenBarn = buildHalloweenBarn(-64, 16, Math.PI * 0.15);
+  renderDecorations(); // island decorations (flowers, grass, etc.)
   /* ---- interiors: cozy teleport rooms far south over water ---- */
   var RW = 13, RD = 11, WH = 4.2;
   var BOOK_COLS = [0xc94f4f, 0x4a7ab8, 0x4aa86b, 0xd8a04a, 0x8a5ab8, 0xe8e0d0, 0x3a8a8a];
@@ -2091,6 +2380,27 @@ function init(canvasId, opts) {
   player.position.set(startX, groundHeight(startX, startZ), startZ);
   partner.position.set(startX + 3.2, groundHeight(startX + 3.2, startZ + 2.6), startZ + 2.6);
   scene.add(player); scene.add(partner);
+  var isGuest = (myName === 'Guest');
+  partner.visible = isGuest; // guest: AI couple roams; signed-in: hidden until real partner joins
+  /* Guest mode: a second AI character so it's a couple roaming together */
+  var guestCouple2 = null, guestCouple2Yaw = 0, gc2Rig = null;
+  if (isGuest) {
+    gc2Rig = buildCharacter({
+      name: 'Guest', girl: myRole !== 'girl',
+      sweater: myRole !== 'girl' ? CHMAT.boySw : CHMAT.grlSw,
+      pants: myRole !== 'girl' ? CHMAT.boyPn : CHMAT.grlPn,
+      torsoGeo: myRole !== 'girl' ? CHGEO.boyTorso : CHGEO.grlTorso,
+      trimGeo: myRole !== 'girl' ? CHGEO.boyHem : CHGEO.grlCables,
+      trimMat: myRole !== 'girl' ? CHMAT.boyHem : CHMAT.grlCb,
+      hairGeo: myRole !== 'girl' ? CHGEO.boyHair : CHGEO.grlCap,
+      hairMat: myRole !== 'girl' ? CHMAT.hair : CHMAT.hairG,
+      legLowMat: myRole !== 'girl' ? CHMAT.boySh : CHMAT.grlBt
+    });
+    guestCouple2 = gc2Rig.group;
+    var gx = ISL_A.cx + 20, gz = 8;
+    guestCouple2.position.set(gx, groundHeight(gx, gz), gz);
+    scene.add(guestCouple2);
+  }
   var playerYaw = 0, targetYaw = 0, partnerYaw = 0;
   var playerMovingState = false; // Phase 5: tracked for network sync
 
@@ -2363,7 +2673,7 @@ function init(canvasId, opts) {
   }
 
   /* ---------------- partner (Tara) AI ---------------- */
-  var partnerOnline = true, partnerSeeking = true;
+  var partnerOnline = isGuest, partnerSeeking = true; // guest: AI couple roams; signed-in: hidden until join
   /* Phase 5 multiplayer: when partnerRemote is true, the partner rig is driven
      by network state instead of the follow AI. setPartnerNet() feeds target
      transform; updatePartner lerps toward it for smoothness. */
@@ -2411,9 +2721,13 @@ function init(canvasId, opts) {
     partnerYaw = 0; partner.rotation.y = 0;
   })();
   function setPartnerOnline(b) {
-    partnerOnline = !!b; // AI idles at home; no auto-follow (one character per island)
+    if (isGuest) return; // guest: AI couple always roams
+    partnerOnline = !!b;
+    partner.visible = !!b; // only show the other character when they've actually joined
+    if (!partnerOnline) partnerSeeking = true; // reset AI cleanly
   }
   function updatePartner(dt, t) {
+    if (!partnerOnline && !partnerRemote) return; // hidden until they join — skip AI
     var pp = partner.position;
     /* Phase 5: remote-driven partner — lerp toward network state, bypass AI */
     if (partnerRemote && !isPartnerStale()) {
@@ -2485,6 +2799,28 @@ function init(canvasId, opts) {
     var gy = walkHeight(pp.x, pp.z);
     if (gy > -900) pp.y = lerp(pp.y, gy, 1 - Math.exp(-dt * 10));
     updateCharacterAnim(partnerRig, dt, t, moving, 3.2); // gentle amble
+    /* Guest mode: second AI character follows the partner (a couple roaming together) */
+    if (isGuest && guestCouple2) {
+      var gp = guestCouple2.position;
+      var gdx = pp.x - gp.x, gdz = pp.z - gp.z;
+      var gd = Math.hypot(gdx, gdz);
+      var gmoving = false;
+      if (gd > 2.5) { // keep a couple's distance, follow
+        var gst = stepMover(gp.x, gp.z, gdx / gd, gdz / gd, 3.0, dt);
+        gp.x = gst.x; gp.z = gst.z; gmoving = gst.moved;
+        if (gst.moved) {
+          var gty = Math.atan2(gdx / gd, gdz / gd), gdy = gty - guestCouple2Yaw;
+          while (gdy > Math.PI) gdy -= Math.PI * 2;
+          while (gdy < -Math.PI) gdy += Math.PI * 2;
+          guestCouple2Yaw += gdy * (1 - Math.exp(-dt * 8));
+          guestCouple2.rotation.y = guestCouple2Yaw;
+        }
+      }
+      var ggy = walkHeight(gp.x, gp.z);
+      if (ggy > -900) gp.y = lerp(gp.y, ggy, 1 - Math.exp(-dt * 10));
+      // Find the rig for animation (we need to store it)
+      updateCharacterAnim(gc2Rig, dt, t, gmoving, 3.0);
+    }
   }
   /* ================= PHASE 4: interactive objects =================
      Sky wheels (rideable), docks + rowboats, rideable bicycles,
@@ -3707,6 +4043,13 @@ function init(canvasId, opts) {
     updateGift(dt, t);
     updatePhase4(dt, t); // Phase 4: sky wheels, boats, campfire warmth
     updateShootingStars(dt); // M8: miss-you shooting stars
+    /* Halloween Barn: floating ghosts */
+    if (halloweenBarn && halloweenBarn.userData.ghosts) {
+      var gt = performance.now() * 0.001;
+      halloweenBarn.userData.ghosts.forEach(function (gh) {
+        gh.position.y = gh.userData.baseY + Math.sin(gt * 1.5 + gh.userData.phase) * 0.4;
+      });
+    }
     updateCamera(dt);
     updateDayNight(dt, t);
     updateWeather(dt, t); // settings: rain / snow particles + overcast mood
@@ -3777,6 +4120,23 @@ function init(canvasId, opts) {
       } catch (e) {}
     },
     shootingStar: shootingStar, // M8: miss-you shooting star
+    addDecoration: addDecoration, // island decorations
+    clearDecorations: clearDecorations,
+    refreshBuildingLabels: function () { // update prompt labels after rename
+      try {
+        var raw = localStorage.getItem('kanavu-building-names-v1');
+        var names = raw ? JSON.parse(raw) : {};
+        interactables.forEach(function (it) {
+          if (it.buildingType && it.buildingSide) {
+            var key = it.buildingSide + '-' + it.buildingType;
+            if (names[key] && window.KanavuSocial && window.KanavuSocial.BUILDING_INFO) {
+              var info = window.KanavuSocial.BUILDING_INFO[it.buildingType];
+              if (info) it.label = info.icon + ' ' + names[key];
+            }
+          }
+        });
+      } catch (e) {}
+    },
     getPlayerPos: function () { return { x: player.position.x, y: player.position.y, z: player.position.z }; },
     getPartnerPos: function () { return { x: partner.position.x, y: partner.position.y, z: partner.position.z }; },
     getRole: function () { return myRole; },
