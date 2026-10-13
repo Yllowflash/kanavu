@@ -49,10 +49,13 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
   <canvas id="world-canvas"></canvas>
 </div>
 <button id="mp-btn"><span class="dot" id="mp-dot"></span><span id="mp-label">Walk Together</span></button>
+<button id="sound-btn" title="sound on/off" style="position:fixed;top:14px;left:14px;z-index:50;display:none;width:44px;height:44px;border-radius:50%;border:1px solid rgba(245,200,110,.4);background:rgba(26,14,18,.65);color:#f5d9a8;font-size:19px;cursor:pointer;backdrop-filter:blur(6px)">♪</button>
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="kanavu-world.js?v=2"></script>
+<script src="kanavu-world.js?v=3"></script>
 <script src="kanavu-multiplayer.js?v=1"></script>
+<script src="kanavu-music.js?v=1"></script>
+<script src="kanavu-ambience.js?v=1"></script>
 <script>
 (function(){
   var beginBtn = document.getElementById('begin-btn');
@@ -60,6 +63,7 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
   var gameScreen = document.getElementById('game-screen');
   var loading = document.getElementById('loading');
   var mpBtn = document.getElementById('mp-btn');
+  var soundBtn = document.getElementById('sound-btn');
   var mpDot = document.getElementById('mp-dot');
   var mpLabel = document.getElementById('mp-label');
   var started = false;
@@ -79,6 +83,12 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
           gameScreen.classList.add('visible');
           loading.classList.remove('visible');
           mpBtn.classList.add('visible');
+          soundBtn.style.display = 'block';
+          // Start the island soundscape: lofi desi chill-hop + calming nature
+          try {
+            if (window.KanavuMusic) KanavuMusic.start();
+            if (window.KanavuAmbience) KanavuAmbience.start();
+          } catch (sndErr) { console.warn('[audio] autoplay blocked:', sndErr); }
           // Init multiplayer (graceful if Supabase fails)
           try {
             if (window.KanavuMultiplayer) {
@@ -117,6 +127,16 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
   mpBtn.addEventListener('click', function () {
     if (mp) mp.showUI();
     else alert('Multiplayer is not available right now.');
+  });
+  var soundOn = true;
+  soundBtn.addEventListener('click', function () {
+    soundOn = !soundOn;
+    try {
+      if (window.KanavuMusic) { if (soundOn) KanavuMusic.start(); else KanavuMusic.stop(); }
+      if (window.KanavuAmbience) { if (soundOn) KanavuAmbience.start(); else KanavuAmbience.stop(); }
+    } catch (e) {}
+    soundBtn.textContent = soundOn ? '♪' : '✕';
+    soundBtn.style.opacity = soundOn ? '1' : '0.45';
   });
 })();
 </script>
