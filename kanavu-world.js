@@ -2786,7 +2786,7 @@ function init(canvasId, opts) {
     b.group.visible = true;
     scene.remove(b.group);
     playerRig.group.add(b.group);      // bike follows the player
-    b.group.position.set(0, 0.02, -0.30); // saddle under the hips
+    b.group.position.set(0, 0.02, 0.40); // saddle (bike-local z=-0.40) lands under the hips
     b.group.rotation.set(0, 0, 0);
     b.pedal = 0;
     promptLocked = true;
@@ -2796,7 +2796,7 @@ function init(canvasId, opts) {
     var b = ridingBike; if (!b) return;
     ridingBike = null; speedMult = 1;
     var yaw = playerYaw;
-    var wx = player.position.x - 0.30 * Math.sin(yaw), wz = player.position.z - 0.30 * Math.cos(yaw);
+    var wx = player.position.x - 0.55 * Math.sin(yaw), wz = player.position.z - 0.55 * Math.cos(yaw);
     var wy = walkHeight(wx, wz);
     if (wy < -900) { wx = player.position.x; wz = player.position.z; wy = player.position.y; }
     playerRig.group.remove(b.group);
@@ -3170,9 +3170,13 @@ function init(canvasId, opts) {
   function updateCamera(dt) {
     var tp = cameraTargetOverride || player.position; // Phase 4: follow gondola while riding
     _camTarget.set(tp.x, tp.y + 2.2, tp.z);
-    /* gentle auto-follow: while walking, the camera swings behind the character */
+    /* gentle auto-follow: while walking, the camera swings behind the character.
+       The camera sits behind a character facing (sin h, cos h) when its yaw
+       equals h + PI (camera offset = -(facing) * dist). Targeting playerYaw
+       alone leaves the camera perpetually PI behind its goal, which made the
+       camera orbit forever and the player walk in circles. */
     if (playerMovingState && !orbit.dragging && camPointers.size === 0 && !ridingWheel && !ridingBike) {
-      var dyaw = playerYaw - orbit.yaw;
+      var dyaw = (playerYaw + Math.PI) - orbit.yaw;
       while (dyaw > Math.PI) dyaw -= Math.PI * 2;
       while (dyaw < -Math.PI) dyaw += Math.PI * 2;
       orbit.yaw += dyaw * (1 - Math.exp(-dt * 1.6));
