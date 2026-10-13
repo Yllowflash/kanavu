@@ -1,14 +1,11 @@
 /* ============================================================================
  * Kanavu — kanavu-music.js
  * ----------------------------------------------------------------------------
- * Generative lofi Desi chill-hop for the islands. No audio files: everything
- * is synthesized live with the Web Audio API and loops forever.
- *
- *   - Rhodes-style jazzy 7th chords (I - vi - IV - V), lowpassed for warmth
- *   - Tanpura-like sa/pa drone underneath
- *   - Sitar-ish plucked lead phrasing in Raga Khamaj (flat 7th = desi flavor)
- *   - Boom-bap drums with swing: soft kick, snare, hats
- *   - Vinyl crackle + hiss for the cozy lofi texture
+ * Background music: a real lofi hip-hop track with a lush dreamy reverb
+ * ("lofi-reverb.mp3"), looped gaplessly through the Web Audio API.
+ * If the track cannot be fetched/decoded, falls back to the built-in
+ * generative lofi engine (Rhodes-style 7th chords, tanpura drone,
+ * sitar-ish lead, boom-bap drums, vinyl texture) so music never breaks.
  *
  * API:
  *   KanavuMusic.start()   -> Promise (call from a user gesture)
@@ -21,8 +18,98 @@
 (function () {
 'use strict';
 
-var ctx = null, master = null, musicBus = null;
-var playing = false, schedTimer = null;
+var TRACK_URL = 'lofi-reverb.mp3?v=1';
+
+var ctx = null, master = null, comp = null;
+var musicBus = null;              // generative engine bus
+var trackGain = null;             // track bus (for fades)
+var playing = false;
+var genTimer = null;              // generative scheduler handle
+var genMode = false;              // true when generative fallback is active
+var trackBuf = null, trackSrc = null, trackLoad = null;
+var startSeq = 0;                 // guards late load completions
+
+/* ================= shared audio graph ================= */
+function initCtx() {
+  if (ctx) return;
+  var AC = window.AudioContext || window.webkitAudioContext;
+  ctx = new AC();
+  master = ctx.createGain();
+  master.gain.value = 0.55;
+  comp = ctx.createDynamicsCompressor();
+  comp.threshold.value = -18; comp.ratio.value = 4;
+  master.connect(comp); comp.connect(ctx.destination);
+
+  musicBus = ctx.createGain();
+  var lp = ctx.createBiquadFilter(); // lofi warmth for the generative engine
+  lp.type = 'lowpass'; lp.frequency.value = 3400; lp.Q.value = 0.4;
+  musicBus.connect(lp); lp.connect(master);
+  // gentle wow/flutter on the generative mix
+  var lfo = ctx.createOscillator(); lfo.frequency.value = 0.45;
+  var lfoG = ctx.createGain(); lfoG.gain.value = 0.02;
+  lfo.connect(lfoG); lfoG.connect(musicBus.gain); lfo.start();
+
+  trackGain = ctx.createGain();
+  trackGain.gain.value = 0.0001;
+  trackGain.connect(master);
+}
+
+/* ================= reverbed track playback ================= */
+function ensureTrackLoaded() {
+  if (trackBuf) return Promise.resolve(trackBuf);
+  if (trackLoad) return trackLoad;
+  trackLoad = fetch(TRACK_URL, { cache: 'force-cache' })
+    .then(function (r) {
+      if (!r.ok) throw new Error('track HTTP ' + r.status);
+      return r.arrayBuffer();
+    })
+    .then(function (ab) {
+      return new Promise(function (resolve, reject) {
+        ctx.decodeAudioData(ab, resolve, reject);
+      });
+    })
+    .then(function (buf) { trackBuf = buf; return buf; })
+    .catch(function (err) { trackLoad = null; throw err; });
+  return trackLoad;
+}
+
+function playTrack() {
+  stopTrackNow();
+  trackSrc = ctx.createBufferSource();
+  trackSrc.buffer = trackBuf;
+  trackSrc.loop = true;
+  trackSrc.connect(trackGain);
+  trackSrc.start();
+  var t = ctx.currentTime;
+  trackGain.gain.cancelScheduledValues(t);
+  trackGain.gain.setValueAtTime(Math.max(trackGain.gain.value, 0.0001), t);
+  trackGain.gain.exponentialRampToValueAtTime(0.9, t + 3.0); // slow dreamy fade-in
+  genMode = false;
+}
+
+function stopTrackNow() {
+  if (trackSrc) {
+    try { trackSrc.stop(); } catch (e) {}
+    try { trackSrc.disconnect(); } catch (e) {}
+    trackSrc = null;
+  }
+}
+
+function fadeOutTrack() {
+  if (!trackSrc) return;
+  var src = trackSrc;
+  var t = ctx.currentTime;
+  trackGain.gain.cancelScheduledValues(t);
+  trackGain.gain.setValueAtTime(Math.max(trackGain.gain.value, 0.0001), t);
+  trackGain.gain.exponentialRampToValueAtTime(0.0001, t + 0.7);
+  setTimeout(function () {
+    try { src.stop(); } catch (e) {}
+    try { src.disconnect(); } catch (e) {}
+    if (trackSrc === src) trackSrc = null;
+  }, 800);
+}
+
+/* ================= generative lofi engine (fallback) ================= */
 var nextTime = 0, step = 0;
 
 var BPM = 76;
@@ -45,26 +132,6 @@ var HAT   = [1,0,1,1, 1,0,1,0, 1,0,1,1, 1,0,1,0];
 
 function midi(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 function rnd(a, b) { return a + Math.random() * (b - a); }
-
-function initCtx() {
-  if (ctx) return;
-  var AC = window.AudioContext || window.webkitAudioContext;
-  ctx = new AC();
-  master = ctx.createGain();
-  master.gain.value = 0.55;
-  var comp = ctx.createDynamicsCompressor();
-  comp.threshold.value = -18; comp.ratio.value = 4;
-  master.connect(comp); comp.connect(ctx.destination);
-  musicBus = ctx.createGain();
-  var lp = ctx.createBiquadFilter(); // lofi warmth
-  lp.type = 'lowpass'; lp.frequency.value = 3400; lp.Q.value = 0.4;
-  musicBus.connect(lp); lp.connect(master);
-  // gentle wow/flutter on the whole mix
-  var lfo = ctx.createOscillator(); lfo.frequency.value = 0.45;
-  var lfoG = ctx.createGain(); lfoG.gain.value = 0.02;
-  lfo.connect(lfoG); lfoG.connect(musicBus.gain); lfo.start();
-  startVinyl();
-}
 
 /* ---- vinyl crackle + hiss ---- */
 function startVinyl() {
@@ -220,21 +287,49 @@ function scheduler() {
   }
 }
 
+function startGenerative() {
+  if (genTimer) return;
+  genMode = true;
+  step = 0;
+  nextTime = ctx.currentTime + 0.1;
+  startVinyl();
+  genTimer = setInterval(scheduler, 90);
+}
+function stopGenerative() {
+  if (genTimer) { clearInterval(genTimer); genTimer = null; }
+  genMode = false;
+}
+
 /* ---- public API ---- */
 function start() {
   initCtx();
+  var seq = ++startSeq;
   return ctx.resume().then(function () {
     if (playing) return;
+    if (seq !== startSeq) return; // superseded
     playing = true;
-    step = 0;
-    nextTime = ctx.currentTime + 0.1;
-    schedTimer = setInterval(scheduler, 90);
+    if (trackBuf) {
+      playTrack();
+      return;
+    }
+    ensureTrackLoaded().then(function () {
+      if (seq !== startSeq || !playing) return;
+      playTrack();
+    }).catch(function () {
+      if (seq !== startSeq || !playing) return;
+      startGenerative(); // track unavailable: fall back to synth
+    });
   });
 }
 function stop() {
+  startSeq++; // invalidate any in-flight load
   playing = false;
-  if (schedTimer) { clearInterval(schedTimer); schedTimer = null; }
-  if (ctx) ctx.suspend();
+  stopGenerative();
+  if (ctx) {
+    fadeOutTrack();
+    // suspend after the fade so a later start() resumes cleanly
+    setTimeout(function () { if (!playing && ctx) ctx.suspend(); }, 900);
+  }
 }
 function toggle() {
   if (playing) { stop(); return false; }
@@ -244,6 +339,6 @@ function toggle() {
 window.KanavuMusic = {
   start: start, stop: stop, toggle: toggle,
   isPlaying: function () { return playing; },
-  version: 'lofi-desi-1.0'
+  version: 'lofi-track-2.0'
 };
 })();
