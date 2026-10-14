@@ -41,6 +41,7 @@ function initCtx() {
   master.connect(comp); comp.connect(ctx.destination);
 
   musicBus = ctx.createGain();
+  musicBus.gain.value = getVolume() * 0.9; // saved music volume
   var lp = ctx.createBiquadFilter(); // lofi warmth for the generative engine
   lp.type = 'lowpass'; lp.frequency.value = 3400; lp.Q.value = 0.4;
   musicBus.connect(lp); lp.connect(master);
@@ -112,23 +113,23 @@ function fadeOutTrack() {
 /* ================= generative lofi engine (fallback) ================= */
 var nextTime = 0, step = 0;
 
-var BPM = 76;
+var BPM = 64; // lofi indie slow: dreamy and unhurried
 var SIXTEENTH = 60 / BPM / 4;
-var SWING = 0.58; // >0.5 = swung
+var SWING = 0.52; // barely swung: indie, not hip-hop
 
-/* chord progression: Cmaj7 - Am7 - Fmaj7 - G7 (midi note numbers) */
+/* dreamy indie progression: Cmaj9 - Am9 - Fmaj9 - Em7 (midi) */
 var CHORDS = [
-  [48, 52, 55, 59], // Cmaj7
-  [45, 48, 52, 55], // Am7
-  [41, 45, 48, 52], // Fmaj7
-  [43, 47, 50, 53]  // G7
+  [48, 52, 55, 59, 62], // Cmaj9
+  [45, 48, 52, 55, 59], // Am9
+  [41, 45, 48, 52, 55], // Fmaj9
+  [40, 43, 47, 50, 55]  // Em7(11)
 ];
-/* Raga Khamaj-ish lead scale (C D E F G A Bb), around C5 */
-var SCALE = [72, 74, 76, 77, 79, 81, 82, 84, 79, 77, 76, 74];
-/* boom-bap: 16 steps, 1 = hit. kick / snare / hat */
-var KICK  = [1,0,0,0, 0,0,1,0, 0,0,1,0, 0,0,0,0];
-var SNARE = [0,0,0,0, 1,0,0,0, 0,0,0,0, 1,0,0,1];
-var HAT   = [1,0,1,1, 1,0,1,0, 1,0,1,1, 1,0,1,0];
+/* soft indie lead: pentatonic-ish, sparse */
+var SCALE = [72, 74, 76, 79, 81, 84, 81, 79, 76, 74];
+/* minimal indie percussion: soft kick / brush / shaker (16 steps) */
+var KICK  = [1,0,0,0, 0,0,0,0, 0,0,1,0, 0,0,0,0];
+var SNARE = [0,0,0,0, 0,0,1,0, 0,0,0,0, 0,0,0,0]; // soft brush on 2
+var HAT   = [0,0,1,0, 0,0,1,0, 0,0,1,0, 0,0,1,0]; // gentle shaker 8ths
 
 function midi(m) { return 440 * Math.pow(2, (m - 69) / 12); }
 function rnd(a, b) { return a + Math.random() * (b - a); }
@@ -193,32 +194,46 @@ function drone(t, dur) { // tanpura sa + pa
     o.start(t); o.stop(t + dur);
   });
 }
-function pluck(m, t, dur) { // sitar-ish lead: triangle + buzz, meend glide on some notes
+function pluck(m, t, dur) { // indie fingerpicked guitar: warm triangle, soft attack
   var f = midi(m);
   var o = ctx.createOscillator(); o.type = 'triangle';
-  o.frequency.setValueAtTime(f * (Math.random() < 0.3 ? 1.03 : 1.0), t);
-  o.frequency.exponentialRampToValueAtTime(f, t + 0.09); // settle (meend touch)
-  var bz = ctx.createOscillator(); bz.type = 'sawtooth'; bz.frequency.value = f;
-  var bf = ctx.createBiquadFilter(); bf.type = 'bandpass'; bf.frequency.value = f * 3; bf.Q.value = 2;
-  var bg = ctx.createGain(); bg.gain.value = 0.06;
-  var fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 2600;
+  o.frequency.value = f;
+  var o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = f * 2;
+  var g2 = ctx.createGain(); g2.gain.value = 0.15;
+  var fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 1800;
   var g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
-  g.gain.exponentialRampToValueAtTime(0.22, t + 0.015);
+  g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
   g.gain.exponentialRampToValueAtTime(0.0001, t + dur);
-  o.connect(fl); bz.connect(bf); bf.connect(bg); bg.connect(fl); fl.connect(g); g.connect(musicBus);
-  o.start(t); bz.start(t); o.stop(t + dur + 0.1); bz.stop(t + dur + 0.1);
+  o.connect(fl); o2.connect(g2); g2.connect(fl); fl.connect(g); g.connect(musicBus);
+  o.start(t); o2.start(t); o.stop(t + dur + 0.1); o2.stop(t + dur + 0.1);
 }
-function kick(t) {
+function kick(t, soft) {
   var o = ctx.createOscillator(); o.type = 'sine';
-  o.frequency.setValueAtTime(120, t);
-  o.frequency.exponentialRampToValueAtTime(38, t + 0.11);
+  o.frequency.setValueAtTime(soft ? 90 : 120, t);
+  o.frequency.exponentialRampToValueAtTime(soft ? 45 : 38, t + 0.11);
   var g = ctx.createGain();
-  g.gain.setValueAtTime(0.5, t);
-  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.42);
+  g.gain.setValueAtTime(soft ? 0.22 : 0.5, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + (soft ? 0.3 : 0.42));
   o.connect(g); g.connect(musicBus); o.start(t); o.stop(t + 0.5);
 }
-function snare(t) {
+function brush(t) { // soft brushed snare: airy, no crack
+  var n = noiseSrc(0.22);
+  var f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 3200; f.Q.value = 0.6;
+  var g = ctx.createGain();
+  g.gain.setValueAtTime(0.10, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
+  n.connect(f); f.connect(g); g.connect(musicBus); n.start(t);
+}
+function shaker(t) { // gentle egg-shaker 8ths
+  var n = noiseSrc(0.06);
+  var f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 6000;
+  var g = ctx.createGain();
+  g.gain.setValueAtTime(0.045, t);
+  g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
+  n.connect(f); f.connect(g); g.connect(musicBus); n.start(t);
+}
+function snare(t) { // (legacy, unused in indie mode)
   var n = noiseSrc(0.16);
   var f = ctx.createBiquadFilter(); f.type = 'bandpass'; f.frequency.value = 1900; f.Q.value = 0.8;
   var g = ctx.createGain();
@@ -231,7 +246,7 @@ function snare(t) {
   g2.gain.exponentialRampToValueAtTime(0.0001, t + 0.1);
   o.connect(g2); g2.connect(musicBus); o.start(t); o.stop(t + 0.12);
 }
-function hat(t, open) {
+function hat(t, open) { // (legacy, unused in indie mode)
   var n = noiseSrc(open ? 0.18 : 0.045);
   var f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 7200;
   var g = ctx.createGain();
@@ -261,12 +276,17 @@ function scheduleStep(s, t) {
   if (stp === 0) {
     rhodesChord(CHORDS[bar], t, barDur * 1.05);
     if (bar === 0) drone(t, barDur * 4);
-    if (stp === 0 && bar % 2 === 0) scheduleMelody(t); // phrase every 2 bars
+    if (bar % 2 === 0) scheduleMelody(t); // sparse dreamy phrase every 2 bars
   }
-  if (stp === 10 && (bar === 1 || bar === 3)) rhodesChord(CHORDS[bar].slice(1), swingT, SIXTEENTH * 5); // lazy stab
-  if (KICK[stp]) kick(swingT);
-  if (SNARE[stp]) snare(swingT);
-  if (HAT[stp]) hat(swingT, stp === 14);
+  // Fingerpicked indie arpeggio: gentle 8th-note pattern on chord tones
+  if (stp % 2 === 0) {
+    var chord = CHORDS[bar];
+    var noteIdx = [0, 1, 2, 3, 2, 1, 2, 3][stp / 2]; // Travis-ish picking
+    pluck(chord[noteIdx] + 12, swingT, 0.35); // soft, high
+  }
+  if (KICK[stp]) kick(swingT, true); // soft
+  if (SNARE[stp]) brush(swingT); // brushed snare, not cracked
+  if (HAT[stp]) shaker(swingT);
 }
 function scheduleMelody(t) {
   var n = 3 + Math.floor(Math.random() * 3); // 3-5 notes per phrase
@@ -293,6 +313,11 @@ function startGenerative() {
   step = 0;
   nextTime = ctx.currentTime + 0.1;
   startVinyl();
+  // Slow dreamy fade-in: 8 seconds from silence
+  var t = ctx.currentTime;
+  musicBus.gain.cancelScheduledValues(t);
+  musicBus.gain.setValueAtTime(0.0001, t);
+  musicBus.gain.exponentialRampToValueAtTime(0.9, t + 8.0);
   genTimer = setInterval(scheduler, 90);
 }
 function stopGenerative() {
@@ -308,17 +333,8 @@ function start() {
     if (playing) return;
     if (seq !== startSeq) return; // superseded
     playing = true;
-    if (trackBuf) {
-      playTrack();
-      return;
-    }
-    ensureTrackLoaded().then(function () {
-      if (seq !== startSeq || !playing) return;
-      playTrack();
-    }).catch(function () {
-      if (seq !== startSeq || !playing) return;
-      startGenerative(); // track unavailable: fall back to synth
-    });
+    // Lofi indie slow generative is the primary background music
+    startGenerative();
   });
 }
 function stop() {
@@ -336,9 +352,23 @@ function toggle() {
   start(); return true;
 }
 
+function setVolume(v) { // 0..1
+  try {
+    var vol = Math.max(0, Math.min(1, v));
+    localStorage.setItem('kanavu-vol-music', String(vol));
+    if (musicBus) musicBus.gain.setTargetAtTime(vol * 0.9, ctx.currentTime, 0.5);
+  } catch (e) {}
+}
+function getVolume() {
+  try {
+    var v = parseFloat(localStorage.getItem('kanavu-vol-music'));
+    return isNaN(v) ? 0.8 : v;
+  } catch (e) { return 0.8; }
+}
 window.KanavuMusic = {
   start: start, stop: stop, toggle: toggle,
   isPlaying: function () { return playing; },
-  version: 'lofi-track-2.0'
+  setVolume: setVolume, getVolume: getVolume,
+  version: 'lofi-indie-1.0'
 };
 })();

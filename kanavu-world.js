@@ -399,9 +399,9 @@ function init(canvasId, opts) {
   /* ---------------- scatter: trees / rocks / flowers / bushes -------------
      Instanced meshes grouped per island quadrant for 180-degree LOD. */
   var lodChunks = []; // {obj, cx, cz, noBehind, noLOD}
-  function registerChunk(obj, cx, cz, noBehind) {
+  function registerChunk(obj, cx, cz, noBehind, noLOD) {
     scene.add(obj);
-    var ch = { obj: obj, cx: cx, cz: cz, noBehind: !!noBehind, noLOD: false };
+    var ch = { obj: obj, cx: cx, cz: cz, noBehind: !!noBehind, noLOD: !!noLOD };
     lodChunks.push(ch);
     return ch;
   }
@@ -2042,6 +2042,75 @@ function init(canvasId, opts) {
       }, 1200);
     });
   }
+  /* M8: Sleep-together mode (join-later, morning notes) */
+  var sleepTogetherState = null; // {host, partnerJoined}
+  function startSleepTogether() {
+    if (sleepTogetherState) return;
+    sleepTogetherState = { host: myName || 'me', partnerJoined: false, t: 0 };
+    // Lie down
+    try {
+      playerRig.rig.rotation.x = -Math.PI / 2.2; // lying back
+      playerRig.rig.position.y = 0.4;
+    } catch (e) {}
+    // Notify partner
+    try {
+      if (typeof mp !== 'undefined' && mp && mp.sendMsg) {
+        mp.sendMsg('sleep-invite', { from: myName || 'me' });
+      }
+      if (window.KanavuSocial && window.KanavuSocial.toast) {
+        window.KanavuSocial.toast('😴 Sleeping... waiting for your partner to join');
+      }
+    } catch (e) {}
+    // Dim the screen
+    fadeTo(true, 0.7);
+  }
+  function joinSleepTogether() {
+    if (!sleepTogetherState) {
+      sleepTogetherState = { host: 'partner', partnerJoined: true, t: 0 };
+    } else {
+      sleepTogetherState.partnerJoined = true;
+    }
+    // Move next to partner and lie down
+    try {
+      var dx = partner.position.x - player.position.x, dz = partner.position.z - player.position.z;
+      var d = Math.hypot(dx, dz) || 0.001;
+      if (d > 2) {
+        player.position.x = partner.position.x - dx / d * 1.8;
+        player.position.z = partner.position.z - dz / d * 1.8;
+      }
+      playerRig.rig.rotation.x = -Math.PI / 2.2;
+      playerRig.rig.position.y = 0.4;
+      partnerRig.rig.rotation.x = -Math.PI / 2.2;
+      partnerRig.rig.position.y = 0.4;
+    } catch (e) {}
+    try {
+      if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('sleep-join', {});
+      if (window.KanavuSocial && window.KanavuSocial.toast) {
+        window.KanavuSocial.toast('😴 Sleeping together... sweet dreams');
+      }
+    } catch (e) {}
+    fadeTo(true, 0.7);
+  }
+  function wakeUp() {
+    if (!sleepTogetherState) return;
+    sleepTogetherState = null;
+    try {
+      playerRig.rig.rotation.x = 0;
+      playerRig.rig.position.y = 0;
+      partnerRig.rig.rotation.x = 0;
+      partnerRig.rig.position.y = 0;
+    } catch (e) {}
+    fadeTo(false, 1.0);
+    // Morning note prompt
+    try {
+      if (window.KanavuSocial && window.KanavuSocial.openMorningNote) {
+        window.KanavuSocial.openMorningNote();
+      }
+    } catch (e) {}
+    try {
+      if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('sleep-wake', {});
+    } catch (e) {}
+  }
   function doTea(st) {
     if (st.brewing) return;
     st.brewing = true;
@@ -2380,12 +2449,17 @@ function init(canvasId, opts) {
     var group = new THREE.Group();   // world position + yaw
     var rig = new THREE.Group();     // walk bob + forward lean
     group.add(rig);
+    // Per-character materials (customizable: skin, hair)
+    var mySkin = CHMAT.skin.clone();
+    var myHair = (opt.hairMat || CHMAT.hair).clone();
+    if (opt.skinColor) mySkin.color.setHex(opt.skinColor);
+    if (opt.hairColor) myHair.color.setHex(opt.hairColor);
     function M(geo, mat) { var m = new THREE.Mesh(geo, mat); m.castShadow = true; rig.add(m); return m; }
     var torso = M(opt.torsoGeo, opt.sweater);
     if (opt.trimGeo) M(opt.trimGeo, opt.trimMat);
     var headG = new THREE.Group(); headG.position.set(0, 2.38, 0); rig.add(headG);
     function HM(geo, mat) { var m = new THREE.Mesh(geo, mat); m.castShadow = true; headG.add(m); return m; }
-    HM(CHGEO.head, CHMAT.skin);
+    HM(CHGEO.head, mySkin);
     var eyeG = new THREE.Group(); eyeG.position.set(0, 0.06, 0.26); headG.add(eyeG);
     eyeG.add(new THREE.Mesh(CHGEO.eyeW, CHMAT.eyeW));   // no shadow: tiny
     eyeG.add(new THREE.Mesh(CHGEO.pupil, CHMAT.pupil));  // no shadow: tiny
@@ -2394,13 +2468,13 @@ function init(canvasId, opts) {
     HM(CHGEO.brows, CHMAT.brow);
     HM(CHGEO.smile, CHMAT.mouth);
     HM(CHGEO.blush, CHMAT.blush);
-    HM(opt.hairGeo, opt.hairMat);
-    if (opt.hairGeo2) HM(opt.hairGeo2, opt.hairMat);
+    HM(opt.hairGeo, myHair);
+    if (opt.hairGeo2) HM(opt.hairGeo2, myHair);
     if (opt.beadGeo) HM(opt.beadGeo, CHMAT.bead);
     function arm(side) { // shoulder pivot; arm hangs -y, character faces +z
       var piv = new THREE.Group(); piv.position.set(0.47 * side, 1.94, 0); rig.add(piv);
       var a = new THREE.Mesh(CHGEO.arm, opt.sweater); a.castShadow = true; piv.add(a);
-      var h = new THREE.Mesh(CHGEO.hand, CHMAT.skin); h.castShadow = true; piv.add(h);
+      var h = new THREE.Mesh(CHGEO.hand, mySkin); h.castShadow = true; piv.add(h);
       piv.rotation.z = 0.10 * side;
       return piv;
     }
@@ -2427,7 +2501,8 @@ function init(canvasId, opts) {
       group: group, rig: rig, torso: torso, headG: headG, eyeG: eyeG,
       shL: shL, shR: shR, hipL: legL.hip, hipR: legR.hip, kneeL: legL.knee, kneeR: legR.knee,
       phase: 0, blinkT: 2 + Math.random() * 2.5, blinkCd: 0, blinked: false, lean: 0,
-      emote: null // {name, t, dur} — social emote override
+      emote: null, // {name, t, dur} — social emote override
+      skinMat: mySkin, hairMat: myHair, hatMesh: null, instrumentMesh: null, isGirl: !!opt.girl
     };
   }
 
@@ -2449,6 +2524,187 @@ function init(canvasId, opts) {
   });
   var playerRig = myRole === 'girl' ? girlRig : boyRig;
   var partnerRig = myRole === 'girl' ? boyRig : girlRig;
+
+  /* ---------------- character customization: hats + instruments ---------------- */
+  var HAT_DEFS = {
+    none: null,
+    cap: { name: 'Baseball Cap', build: function () {
+      var g = new THREE.Group();
+      var dome = new THREE.Mesh(new THREE.SphereGeometry(0.32, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.55),
+        new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.7 }));
+      dome.castShadow = true; g.add(dome);
+      var brim = new THREE.Mesh(new THREE.CylinderGeometry(0.32, 0.34, 0.05, 12, 1, false, -0.6, 1.9),
+        new THREE.MeshStandardMaterial({ color: 0x922b21, roughness: 0.7 }));
+      brim.position.set(0, 0.02, 0.28); brim.castShadow = true; g.add(brim);
+      var btn = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0x922b21, roughness: 0.7 }));
+      btn.position.y = 0.32; g.add(btn);
+      return g;
+    }},
+    beanie: { name: 'Beanie', build: function () {
+      var g = new THREE.Group();
+      var dome = new THREE.Mesh(new THREE.SphereGeometry(0.33, 12, 8, 0, Math.PI * 2, 0, Math.PI * 0.62),
+        new THREE.MeshStandardMaterial({ color: 0x2e86c1, roughness: 0.9 }));
+      dome.castShadow = true; g.add(dome);
+      var rim = new THREE.Mesh(new THREE.TorusGeometry(0.30, 0.07, 8, 16),
+        new THREE.MeshStandardMaterial({ color: 0x1a5276, roughness: 0.9 }));
+      rim.rotation.x = Math.PI / 2; rim.position.y = 0.05; g.add(rim);
+      var pom = new THREE.Mesh(new THREE.SphereGeometry(0.09, 8, 8),
+        new THREE.MeshStandardMaterial({ color: 0xffffff, roughness: 0.95 }));
+      pom.position.y = 0.38; g.add(pom);
+      return g;
+    }},
+    witch: { name: 'Witch Hat', build: function () {
+      var g = new THREE.Group();
+      var brim = new THREE.Mesh(new THREE.CylinderGeometry(0.42, 0.46, 0.06, 14),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8 }));
+      brim.castShadow = true; g.add(brim);
+      var cone = new THREE.Mesh(new THREE.ConeGeometry(0.26, 0.62, 12),
+        new THREE.MeshStandardMaterial({ color: 0x1a1a2e, roughness: 0.8 }));
+      cone.position.set(0.03, 0.33, 0); cone.rotation.z = -0.12; cone.castShadow = true; g.add(cone);
+      var band = new THREE.Mesh(new THREE.TorusGeometry(0.24, 0.035, 6, 14),
+        new THREE.MeshStandardMaterial({ color: 0xe67e22, roughness: 0.6 }));
+      band.rotation.x = Math.PI / 2; band.position.set(0.02, 0.08, 0); g.add(band);
+      return g;
+    }},
+    flowercrown: { name: 'Flower Crown', build: function () {
+      var g = new THREE.Group();
+      var cols = [0xff8ab0, 0xffd166, 0xffffff, 0xc39bff, 0xff6b6b];
+      for (var i = 0; i < 8; i++) {
+        var a = (i / 8) * Math.PI * 2;
+        var f = new THREE.Mesh(new THREE.SphereGeometry(0.075, 8, 6),
+          new THREE.MeshStandardMaterial({ color: cols[i % cols.length], roughness: 0.6 }));
+        f.position.set(Math.cos(a) * 0.29, 0.18 + Math.sin(i * 2.3) * 0.03, Math.sin(a) * 0.29);
+        f.castShadow = true; g.add(f);
+      }
+      var vine = new THREE.Mesh(new THREE.TorusGeometry(0.29, 0.03, 6, 16),
+        new THREE.MeshStandardMaterial({ color: 0x3e6e38, roughness: 0.8 }));
+      vine.rotation.x = Math.PI / 2; vine.position.y = 0.16; g.add(vine);
+      return g;
+    }},
+    tophat: { name: 'Top Hat', build: function () {
+      var g = new THREE.Group();
+      var brim = new THREE.Mesh(new THREE.CylinderGeometry(0.36, 0.36, 0.05, 14),
+        new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.5 }));
+      brim.castShadow = true; g.add(brim);
+      var top = new THREE.Mesh(new THREE.CylinderGeometry(0.22, 0.22, 0.42, 14),
+        new THREE.MeshStandardMaterial({ color: 0x1c1c1c, roughness: 0.5 }));
+      top.position.y = 0.23; top.castShadow = true; g.add(top);
+      var band = new THREE.Mesh(new THREE.TorusGeometry(0.22, 0.03, 6, 14),
+        new THREE.MeshStandardMaterial({ color: 0xc0392b, roughness: 0.6 }));
+      band.rotation.x = Math.PI / 2; band.position.y = 0.06; g.add(band);
+      return g;
+    }},
+    crown: { name: 'Crown', build: function () {
+      var g = new THREE.Group();
+      var base = new THREE.Mesh(new THREE.CylinderGeometry(0.26, 0.28, 0.14, 10),
+        new THREE.MeshStandardMaterial({ color: 0xf1c40f, metalness: 0.7, roughness: 0.3 }));
+      base.castShadow = true; g.add(base);
+      for (var i = 0; i < 5; i++) {
+        var a = (i / 5) * Math.PI * 2;
+        var spike = new THREE.Mesh(new THREE.ConeGeometry(0.06, 0.16, 6),
+          new THREE.MeshStandardMaterial({ color: 0xf1c40f, metalness: 0.7, roughness: 0.3 }));
+        spike.position.set(Math.cos(a) * 0.24, 0.14, Math.sin(a) * 0.24);
+        g.add(spike);
+      }
+      var gem = new THREE.Mesh(new THREE.SphereGeometry(0.05, 8, 6),
+        new THREE.MeshStandardMaterial({ color: 0xe74c3c, roughness: 0.2 }));
+      gem.position.set(0, 0.02, 0.27); g.add(gem);
+      return g;
+    }}
+  };
+  var INSTRUMENT_DEFS = {
+    none: null,
+    guitar: { name: 'Guitar', build: function () {
+      var g = new THREE.Group();
+      var wood = new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.5 });
+      var body = new THREE.Mesh(new THREE.SphereGeometry(0.34, 12, 10), wood);
+      body.scale.set(1, 1.25, 0.55); body.castShadow = true; g.add(body);
+      var neck = new THREE.Mesh(new THREE.BoxGeometry(0.09, 0.85, 0.07),
+        new THREE.MeshStandardMaterial({ color: 0x5d3a1a, roughness: 0.5 }));
+      neck.position.y = 0.72; neck.castShadow = true; g.add(neck);
+      var head = new THREE.Mesh(new THREE.BoxGeometry(0.14, 0.22, 0.07),
+        new THREE.MeshStandardMaterial({ color: 0x5d3a1a, roughness: 0.5 }));
+      head.position.y = 1.22; g.add(head);
+      var hole = new THREE.Mesh(new THREE.CircleGeometry(0.11, 12),
+        new THREE.MeshBasicMaterial({ color: 0x1a0f05 }));
+      hole.position.set(0, 0.1, 0.19); g.add(hole);
+      return g;
+    }},
+    ukulele: { name: 'Ukulele', build: function () {
+      var g = new THREE.Group();
+      var wood = new THREE.MeshStandardMaterial({ color: 0xd4a76a, roughness: 0.5 });
+      var body = new THREE.Mesh(new THREE.SphereGeometry(0.22, 10, 8), wood);
+      body.scale.set(1, 1.2, 0.5); body.castShadow = true; g.add(body);
+      var neck = new THREE.Mesh(new THREE.BoxGeometry(0.07, 0.55, 0.06),
+        new THREE.MeshStandardMaterial({ color: 0x8b5a2b, roughness: 0.5 }));
+      neck.position.y = 0.48; g.add(neck);
+      return g;
+    }},
+    flute: { name: 'Flute', build: function () {
+      var g = new THREE.Group();
+      var tube = new THREE.Mesh(new THREE.CylinderGeometry(0.035, 0.035, 0.7, 8),
+        new THREE.MeshStandardMaterial({ color: 0xc0c0c0, metalness: 0.8, roughness: 0.25 }));
+      tube.rotation.z = Math.PI / 2; tube.castShadow = true; g.add(tube);
+      return g;
+    }}
+  };
+  var SKIN_TONES = [
+    { id: 'porcelain', c: 0xf5d5b8 }, { id: 'sand', c: 0xe8b88a },
+    { id: 'honey', c: 0xd19a66 }, { id: 'bronze', c: 0xb07a4f },
+    { id: 'umber', c: 0x8a5a36 }, { id: 'espresso', c: 0x5d3a22 }
+  ];
+  var HAIR_COLORS = [
+    { id: 'black', c: 0x1a1512 }, { id: 'brown', c: 0x4a2f1d },
+    { id: 'auburn', c: 0x8b3a1a }, { id: 'blonde', c: 0xd4a76a },
+    { id: 'silver', c: 0xb8b8b8 }, { id: 'pink', c: 0xe79fb2 }
+  ];
+  function applyCustomization(rig, cust) {
+    if (!rig) return;
+    if (cust.skin) {
+      var st = SKIN_TONES.find(function (s) { return s.id === cust.skin; });
+      if (st) rig.skinMat.color.setHex(st.c);
+    }
+    if (cust.hair) {
+      var hc = HAIR_COLORS.find(function (h) { return h.id === cust.hair; });
+      if (hc) rig.hairMat.color.setHex(hc.c);
+    }
+    // Hat
+    if (rig.hatMesh) { rig.headG.remove(rig.hatMesh); rig.hatMesh = null; }
+    if (cust.hat && cust.hat !== 'none' && HAT_DEFS[cust.hat]) {
+      var hat = HAT_DEFS[cust.hat].build();
+      hat.position.y = rig.isGirl ? 0.32 : 0.30;
+      rig.headG.add(hat);
+      rig.hatMesh = hat;
+    }
+    // Instrument (on the back)
+    if (rig.instrumentMesh) { rig.rig.remove(rig.instrumentMesh); rig.instrumentMesh = null; }
+    if (cust.instrument && cust.instrument !== 'none' && INSTRUMENT_DEFS[cust.instrument]) {
+      var inst = INSTRUMENT_DEFS[cust.instrument].build();
+      inst.position.set(0, 1.65, -0.42);
+      inst.rotation.x = 0.25;
+      if (cust.instrument === 'flute') { inst.position.set(0.35, 1.2, -0.3); inst.rotation.z = 0.4; }
+      rig.rig.add(inst);
+      rig.instrumentMesh = inst;
+    }
+  }
+  function getCustomization() {
+    try {
+      var raw = localStorage.getItem('kanavu-custom-' + myRole);
+      return raw ? JSON.parse(raw) : { skin: 'bronze', hair: myRole === 'girl' ? 'brown' : 'black', hat: 'none', instrument: 'none' };
+    } catch (e) {
+      return { skin: 'bronze', hair: 'black', hat: 'none', instrument: 'none' };
+    }
+  }
+  function saveCustomization(cust) {
+    try { localStorage.setItem('kanavu-custom-' + myRole, JSON.stringify(cust)); } catch (e) {}
+  }
+  // Apply saved customization to both rigs (partner uses their own saved or default)
+  applyCustomization(playerRig, getCustomization());
+  try {
+    var partnerCust = JSON.parse(localStorage.getItem('kanavu-custom-partner') || 'null');
+    if (partnerCust) applyCustomization(partnerRig, partnerCust);
+  } catch (e) {}
   var player = playerRig.group;
   var partner = partnerRig.group;
   var startX = ISL_A.cx + 32, startZ = 12; // boy's island start (final placement after porches resolve)
@@ -2642,6 +2898,103 @@ function init(canvasId, opts) {
       }
     }
   }
+  /* Stargazing mode: camera tilts to sky, synced shooting stars, constellations */
+  var stargazing = false;
+  var stargazeTimer = 0;
+  var savedCamPos = null, savedCamTarget = null;
+  var constellations = []; // {name, stars: [{x,y,z}]}
+  function toggleStargazing() {
+    stargazing = !stargazing;
+    if (stargazing) {
+      savedCamPos = camera.position.clone();
+      savedCamTarget = _camTarget.clone();
+      stargazeTimer = 2;
+      try {
+        if (window.KanavuSocial && window.KanavuSocial.toast) {
+          window.KanavuSocial.toast('🔭 Stargazing... tap 🔭 again to stop');
+        }
+        if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('stargaze', { on: true });
+      } catch (e) {}
+    } else {
+      if (savedCamPos) camera.position.copy(savedCamPos);
+      if (savedCamTarget) _camTarget.copy(savedCamTarget);
+      try {
+        if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('stargaze', { on: false });
+      } catch (e) {}
+    }
+  }
+  function updateStargazing(dt) {
+    if (!stargazing) return;
+    var tp = new THREE.Vector3(player.position.x, player.position.y + 1.2, player.position.z);
+    var la = new THREE.Vector3(player.position.x + 15, player.position.y + 50, player.position.z - 25);
+    camera.position.lerp(tp, Math.min(1, dt * 1.5));
+    _camTarget.lerp(la, Math.min(1, dt * 1.5));
+    camera.lookAt(_camTarget);
+    stargazeTimer -= dt;
+    if (stargazeTimer <= 0) {
+      shootingStar();
+      stargazeTimer = 7 + Math.random() * 10;
+      try {
+        if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('star', { at: Date.now() });
+      } catch (e) {}
+    }
+  }
+  /* Named constellations (persistent) */
+  var CONST_KEY = 'kanavu-constellations-v1';
+  function getConstellations() {
+    try {
+      var raw = localStorage.getItem(CONST_KEY);
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+  function saveConstellation(name) {
+    try {
+      var consts = getConstellations();
+      // Random star pattern in the sky
+      var stars = [];
+      var cx = (Math.random() - 0.5) * 80, cy = 55 + Math.random() * 20, cz = -40 - Math.random() * 30;
+      for (var i = 0; i < 5 + Math.floor(Math.random() * 4); i++) {
+        stars.push({
+          x: cx + (Math.random() - 0.5) * 18,
+          y: cy + (Math.random() - 0.5) * 12,
+          z: cz + (Math.random() - 0.5) * 10
+        });
+      }
+      consts.push({ name: name, stars: stars, by: myName || 'us', date: new Date().toISOString().slice(0, 10) });
+      localStorage.setItem(CONST_KEY, JSON.stringify(consts));
+      renderConstellations();
+      return true;
+    } catch (e) { return false; }
+  }
+  function renderConstellations() {
+    // Clear old
+    constellations.forEach(function (c) {
+      c.meshes.forEach(function (m) { scene.remove(m); });
+    });
+    constellations = [];
+    var consts = getConstellations();
+    consts.forEach(function (c) {
+      var meshes = [];
+      var mat = new THREE.MeshBasicMaterial({ color: 0xffe9a8 });
+      c.stars.forEach(function (s) {
+        var star = new THREE.Mesh(new THREE.SphereGeometry(0.35, 6, 6), mat);
+        star.position.set(s.x, s.y, s.z);
+        scene.add(star);
+        meshes.push(star);
+      });
+      // Connect with lines
+      if (c.stars.length > 1) {
+        var geo = new THREE.BufferGeometry();
+        var pts = [];
+        c.stars.forEach(function (s) { pts.push(s.x, s.y, s.z); });
+        geo.setAttribute('position', new THREE.BufferAttribute(new Float32Array(pts), 3));
+        var line = new THREE.Line(geo, new THREE.LineBasicMaterial({ color: 0xffe9a8, transparent: true, opacity: 0.4 }));
+        scene.add(line);
+        meshes.push(line);
+      }
+      constellations.push({ name: c.name, meshes: meshes });
+    });
+  }
   var loveEmojiTex = null;
   function getLoveEmojiTex() {
     if (loveEmojiTex) return loveEmojiTex;
@@ -2681,6 +3034,141 @@ function init(canvasId, opts) {
     var mz = (player.position.z + partner.position.z) / 2;
     var my = (player.position.y + partner.position.y) / 2;
     spawnHearts(mx, my + 2.6, mz, 8);
+  }
+  /* Cinematic kiss: orbiting camera, romantic vibes */
+  var kissState = null;
+  function startKissCinematic() {
+    if (kissState || hugState || danceState) return;
+    kissState = { t: 0, dur: 12, angle: 0 };
+    // Move together
+    var mx = (player.position.x + partner.position.x) / 2;
+    var mz = (player.position.z + partner.position.z) / 2;
+    var my = (player.position.y + partner.position.y) / 2;
+    spawnHearts(mx, my + 2.8, mz, 15);
+    // Save camera
+    kissState.savedPos = camera.position.clone();
+    kissState.savedTarget = _camTarget.clone();
+    kissState.cx = mx; kissState.cy = my; kissState.cz = mz;
+    try {
+      if (window.KanavuSocial && window.KanavuSocial.showKissOverlay) {
+        window.KanavuSocial.showKissOverlay();
+      }
+    } catch (e) {}
+  }
+  function updateKissCinematic(dt) {
+    if (!kissState) return;
+    kissState.t += dt;
+    if (kissState.t >= kissState.dur) {
+      // Restore
+      if (kissState.savedPos) camera.position.copy(kissState.savedPos);
+      if (kissState.savedTarget) _camTarget.copy(kissState.savedTarget);
+      try {
+        if (window.KanavuSocial && window.KanavuSocial.hideKissOverlay) {
+          window.KanavuSocial.hideKissOverlay();
+        }
+      } catch (e) {}
+      kissState = null;
+      return;
+    }
+    var t = kissState.t;
+    var k = kissState;
+    // Couple leans in
+    var dx = partner.position.x - player.position.x, dz = partner.position.z - player.position.z;
+    var d = Math.hypot(dx, dz) || 0.001;
+    if (d > 1.1 && t < 1.5) {
+      var step = Math.min(d - 1.1, dt * 3);
+      player.position.x += dx / d * step * 0.5; player.position.z += dz / d * step * 0.5;
+      partner.position.x -= dx / d * step * 0.5; partner.position.z -= dz / d * step * 0.5;
+    } else {
+      // Lean in for the kiss
+      var yawP = Math.atan2(dx, dz), yawQ = Math.atan2(-dx, -dz);
+      player.rotation.y = yawP; partner.rotation.y = yawQ;
+      var lean = Math.min(1, t / 2) * 0.25;
+      playerRig.rig.rotation.x = lean;
+      partnerRig.rig.rotation.x = lean;
+      playerRig.headG.rotation.x = 0.15;
+      partnerRig.headG.rotation.x = 0.15;
+    }
+    // Cinematic orbit: slow 360 around the couple, rising slightly
+    k.angle += dt * 0.45; // ~28 seconds for full circle, we do ~1/3
+    var radius = 9 - Math.min(3, t * 0.4); // dolly in
+    var height = 3.2 + Math.sin(t * 0.5) * 0.8;
+    camera.position.set(
+      k.cx + Math.cos(k.angle) * radius,
+      k.cy + height,
+      k.cz + Math.sin(k.angle) * radius
+    );
+    _camTarget.set(k.cx, k.cy + 1.8, k.cz);
+    camera.lookAt(_camTarget);
+    // Hearts throughout
+    if (Math.random() < dt * 3) {
+      spawnHearts(
+        k.cx + (Math.random() - 0.5) * 4,
+        k.cy + 2.5 + Math.random(),
+        k.cz + (Math.random() - 0.5) * 4,
+        1
+      );
+    }
+    // Sparkles
+    if (Math.floor(t * 4) !== Math.floor((t - dt) * 4)) {
+      spawnHearts(k.cx + (Math.random() - 0.5) * 8, k.cy + 1 + Math.random() * 3, k.cz + (Math.random() - 0.5) * 8, 1);
+    }
+  }
+  /* M8: Slow dance while holding hands */
+  var danceState = null;
+  function startDance() {
+    if (danceState || hugState) return;
+    danceState = { t: 0, dur: 20 }; // 20 second dance
+    var mx = (player.position.x + partner.position.x) / 2;
+    var mz = (player.position.z + partner.position.z) / 2;
+    var my = (player.position.y + partner.position.y) / 2;
+    spawnHearts(mx, my + 2.8, mz, 12);
+    try {
+      if (window.KanavuSocial && window.KanavuSocial.toast) {
+        window.KanavuSocial.toast('💃 Slow dancing... tap 💃 again to stop');
+      }
+    } catch (e) {}
+  }
+  function stopDance() {
+    danceState = null;
+  }
+  function updateDance(dt) {
+    if (!danceState) return;
+    danceState.t += dt;
+    if (danceState.t >= danceState.dur) { danceState = null; return; }
+    var t = danceState.t;
+    // Move together to the center
+    var dx = partner.position.x - player.position.x, dz = partner.position.z - player.position.z;
+    var d = Math.hypot(dx, dz) || 0.001;
+    if (d > 1.6 && t < 2) {
+      var step = Math.min(d - 1.6, dt * 2.5);
+      player.position.x += dx / d * step * 0.5; player.position.z += dz / d * step * 0.5;
+      partner.position.x -= dx / d * step * 0.5; partner.position.z -= dz / d * step * 0.5;
+      return;
+    }
+    // Face each other, sway side to side like slow dancing
+    var yawP = Math.atan2(dx, dz), yawQ = Math.atan2(-dx, -dz);
+    player.rotation.y = yawP; partner.rotation.y = yawQ;
+    var sway = Math.sin(t * 1.8) * 0.35; // gentle sway
+    var bob = Math.sin(t * 3.6) * 0.06; // soft bob
+    [playerRig, partnerRig].forEach(function (c, idx) {
+      var phase = idx === 0 ? 0 : Math.PI; // opposite sway
+      c.rig.position.x = Math.sin(t * 1.8 + phase) * 0.22;
+      c.rig.position.y = Math.abs(bob);
+      c.rig.rotation.z = Math.sin(t * 1.8 + phase) * 0.08;
+      // Arms up in dance hold
+      c.shL.rotation.x = -0.7 + Math.sin(t * 1.8) * 0.1;
+      c.shR.rotation.x = -0.7 - Math.sin(t * 1.8) * 0.1;
+      // Gentle turn
+      c.rig.rotation.y = Math.sin(t * 0.9) * 0.15;
+    });
+    // Hearts periodically
+    if (Math.floor(t * 2) !== Math.floor((t - dt) * 2) && Math.random() < 0.6) {
+      var mx = (player.position.x + partner.position.x) / 2;
+      var mz = (player.position.z + partner.position.z) / 2;
+      var my = (player.position.y + partner.position.y) / 2;
+      spawnHearts(mx + (Math.random() - 0.5) * 2, my + 2.5, mz + (Math.random() - 0.5) * 2, 2);
+    }
   }
   function updateHug(dt) {
     if (!hugState) return;
@@ -3666,9 +4154,9 @@ function init(canvasId, opts) {
     if (lampGeos.length) {
       var lampMesh = new THREE.Mesh(mergeGeos(lampGeos), lampMetalMat);
       lampMesh.castShadow = true;
-      registerChunk(lampMesh, 0, 0);
+      registerChunk(lampMesh, 0, 0, false, true); // never auto-hide: lamps always visible
     }
-    if (headGeos.length) registerChunk(new THREE.Mesh(mergeGeos(headGeos), lampHeadMat), 0, 0);
+    if (headGeos.length) registerChunk(new THREE.Mesh(mergeGeos(headGeos), lampHeadMat), 0, 0, false, true);
   }
 
   /* weather state (declared before the builders run) */
@@ -3924,12 +4412,49 @@ function init(canvasId, opts) {
       var vis = true;
       if (insideRoomObj) vis = (ch.obj === insideRoomObj); // inside: only the room shows
       else if (dist > LOD_DIST) vis = false;
-      else {
-        _toObj.normalize();
-        var facing = _toObj.x * _camDir.x + _toObj.z * _camDir.z;
-        if (facing < -0.18 && !ch.noBehind) vis = false; // behind the camera (>~100 deg)
-      }
+      // No manual behind-camera culling: Three.js frustum culling handles it smoothly.
+      // The old facing<-0.18 check caused visible pop-in at the screen edges.
       if (ch.obj.visible !== vis) ch.obj.visible = vis;
+    }
+  }
+
+  /* Island name banner + welcome on crossing */
+  var currentSide = null; // 'A' or 'B'
+  function getIslandNameLocal() {
+    try { return localStorage.getItem('kanavu-island-name') || 'My Island'; }
+    catch (e) { return 'My Island'; }
+  }
+  function getPartnerIslandNameLocal() {
+    try { return localStorage.getItem('kanavu-partner-island-name') || 'Their Island'; }
+    catch (e) { return 'Their Island'; }
+  }
+  function updateIslandBanner() {
+    try {
+      var banner = document.getElementById('island-name-banner');
+      var txt = document.getElementById('island-name-text');
+      if (!banner || !txt) return;
+      banner.style.display = 'block';
+      // Show the name of whichever island the player is on
+      var name = currentSide === 'B' ? getPartnerIslandNameLocal() : getIslandNameLocal();
+      txt.textContent = name;
+    } catch (e) {}
+  }
+  function updateIslandTracking() {
+    if (!player) return;
+    var side = player.position.x > 0 ? 'B' : 'A';
+    if (currentSide === null) {
+      currentSide = side;
+      updateIslandBanner();
+    } else if (side !== currentSide) {
+      currentSide = side;
+      updateIslandBanner();
+      // Welcome message when crossing
+      var name = side === 'B' ? getPartnerIslandNameLocal() : getIslandNameLocal();
+      try {
+        if (window.KanavuSocial && window.KanavuSocial.toast) {
+          window.KanavuSocial.toast('🏝️ Welcome to ' + name + '!');
+        }
+      } catch (e) {}
     }
   }
 
@@ -4011,10 +4536,16 @@ function init(canvasId, opts) {
     else updateCharacterAnim(playerRig, dt, t, moved, speed); // Phase 3 rig
   }
   var _camTarget = new THREE.Vector3(), _camWant = new THREE.Vector3();
+  var _camTargetSm = new THREE.Vector3(); // smoothed look-at target
   var camDistSm = 26; // smoothed camera distance (pulls in inside interiors)
+  var camInit = false;
   function updateCamera(dt) {
     var tp = cameraTargetOverride || player.position; // Phase 4: follow gondola while riding
     _camTarget.set(tp.x, tp.y + 2.2, tp.z);
+    // Smooth the target too (prevents jitter when player moves)
+    if (!camInit) { _camTargetSm.copy(_camTarget); camInit = true; }
+    var tk = 1 - Math.exp(-dt * 6);
+    _camTargetSm.lerp(_camTarget, tk);
     /* gentle auto-follow: while walking, the camera swings behind the character.
        The camera sits behind a character facing (sin h, cos h) when its yaw
        equals h + PI (camera offset = -(facing) * dist). Targeting playerYaw
@@ -4024,17 +4555,17 @@ function init(canvasId, opts) {
       var dyaw = (playerYaw + Math.PI) - orbit.yaw;
       while (dyaw > Math.PI) dyaw -= Math.PI * 2;
       while (dyaw < -Math.PI) dyaw += Math.PI * 2;
-      orbit.yaw += dyaw * (1 - Math.exp(-dt * 1.6));
+      orbit.yaw += dyaw * (1 - Math.exp(-dt * 2.2)); // slightly faster, smoother follow
     }
     var pzn = zoneAt(player.position.x, player.position.z); // Phase 2 interiors
     var wantD = pzn ? Math.min(orbit.dist, 6.5) : orbit.dist; // interiors: camera stays inside the room
-    camDistSm = lerp(camDistSm, wantD, 1 - Math.exp(-dt * 3));
+    camDistSm = lerp(camDistSm, wantD, 1 - Math.exp(-dt * 4)); // smoother distance transitions
     var cp = Math.cos(orbit.pitch), sp = Math.sin(orbit.pitch);
     var fx = -Math.sin(orbit.yaw) * cp, fz = -Math.cos(orbit.yaw) * cp;
     _camWant.set(
-      _camTarget.x - fx * camDistSm,
-      _camTarget.y + sp * camDistSm,
-      _camTarget.z - fz * camDistSm
+      _camTargetSm.x - fx * camDistSm,
+      _camTargetSm.y + sp * camDistSm,
+      _camTargetSm.z - fz * camDistSm
     );
     /* keep camera above terrain (or room floor inside interiors) */
     var minY = pzn ? (pzn.y + 1.2) : Math.max(groundHeight(_camWant.x, _camWant.z) + 2.2, 3.2);
@@ -4044,9 +4575,9 @@ function init(canvasId, opts) {
       _camWant.z = clamp(_camWant.z, pzn.z0 + 0.9, pzn.z1 - 0.9);
       _camWant.y = clamp(_camWant.y, pzn.y + 1.1, pzn.y + 3.5);
     }
-    var k = 1 - Math.exp(-dt * 4.5);
+    var k = 1 - Math.exp(-dt * 6); // smoother, more responsive
     camera.position.lerp(_camWant, k);
-    camera.lookAt(_camTarget);
+    camera.lookAt(_camTargetSm);
   }
 
   /* ---------------- ambient life ---------------- */
@@ -4167,12 +4698,17 @@ function init(canvasId, opts) {
     var t = clock.elapsedTime;
     waterUniforms.uTime.value = t;
     updatePlayer(dt, t);
+    updateIslandTracking(); // island name banner + welcome on crossing
     updatePartner(dt, t); // Phase 3: Tara idle / porch / remote
     updateHug(dt); // social: hug sequence overrides both rigs
+    updateDance(dt); // M8: slow dance
+    updateKissCinematic(dt); // cinematic kiss
     updateHearts(dt);
     updateGift(dt, t);
     updatePhase4(dt, t); // Phase 4: sky wheels, boats, campfire warmth
     updateShootingStars(dt); // M8: miss-you shooting stars
+    updateStargazing(dt); // M8: stargazing mode
+    try { if (window.KanavuSocial && window.KanavuSocial.checkHuntProximity) window.KanavuSocial.checkHuntProximity(); } catch (e) {}
     /* Halloween Barn: floating ghosts */
     if (halloweenBarn && halloweenBarn.userData.ghosts) {
       var gt = performance.now() * 0.001;
@@ -4234,6 +4770,10 @@ function init(canvasId, opts) {
     setWeather: setWeather, // 'clear' | 'rain' | 'snow'
     getWeather: function () { return weatherMode; },
     sleep: function () { doSleep(); }, // house popup: sleep till morning
+    startSleepTogether: startSleepTogether,
+    joinSleepTogether: joinSleepTogether,
+    wakeUp: wakeUp,
+    isSleepingTogether: function () { return !!sleepTogetherState; },
     isBeaconLitToday: isBeaconLitToday, // M3: beacon state for Today tasks
     lightBeacon: lightBeacon,
     setOutfitColor: function (hex) { // M6: free outfit customization
@@ -4249,7 +4789,35 @@ function init(canvasId, opts) {
         mat.needsUpdate = true;
       } catch (e) {}
     },
+    setOutfitColors: function (sweaterHex, pantsHex) { // shop outfits
+      try {
+        var rig = myRole === 'girl' ? girlRig : boyRig;
+        var isGirl = myRole === 'girl';
+        var dark = shadeHex(sweaterHex, -25);
+        var tex = isGirl ? cableTex(sweaterHex, dark) : knitTex(sweaterHex, dark);
+        var mat = isGirl ? CHMAT.grlSw : CHMAT.boySw;
+        if (mat.map) mat.map.dispose();
+        mat.map = tex; mat.needsUpdate = true;
+        var pantsMat = isGirl ? CHMAT.grlPn : CHMAT.boyPn;
+        pantsMat.color.set(pantsHex);
+      } catch (e) {}
+    },
+    setPartnerOutfitColors: function (sweaterHex, pantsHex) {
+      try {
+        var rig = myRole === 'girl' ? boyRig : girlRig;
+        var isGirl = myRole !== 'girl';
+        var dark = shadeHex(sweaterHex, -25);
+        var tex = isGirl ? cableTex(sweaterHex, dark) : knitTex(sweaterHex, dark);
+        // Partner uses the opposite gender's materials
+        var mat = isGirl ? CHMAT.grlSw : CHMAT.boySw;
+        if (mat.map) mat.map.dispose();
+        mat.map = tex; mat.needsUpdate = true;
+      } catch (e) {}
+    },
     shootingStar: shootingStar, // M8: miss-you shooting star
+    toggleStargazing: toggleStargazing,
+    saveConstellation: saveConstellation,
+    getConstellations: getConstellations,
     addDecoration: addDecoration, // island decorations
     clearDecorations: clearDecorations,
     removeDecorationAt: removeDecorationAt,
@@ -4273,10 +4841,39 @@ function init(canvasId, opts) {
     getRole: function () { return myRole; },
     getPlayerName: function () { return myName; },
     setPlayerName: function (v) { myName = v; }, // name change (takes full effect on reload)
+    getCustomization: getCustomization,
+    /* Island names */
+    getIslandName: function () {
+      try { return localStorage.getItem('kanavu-island-name') || 'My Island'; }
+      catch (e) { return 'My Island'; }
+    },
+    setIslandName: function (v) {
+      try { localStorage.setItem('kanavu-island-name', v); } catch (e) {}
+      updateIslandBanner();
+    },
+    getPartnerIslandName: function () {
+      try { return localStorage.getItem('kanavu-partner-island-name') || 'Their Island'; }
+      catch (e) { return 'Their Island'; }
+    },
+    setPartnerIslandName: function (v) {
+      try { localStorage.setItem('kanavu-partner-island-name', v); } catch (e) {}
+    },
+    setCustomization: function (cust) { saveCustomization(cust); applyCustomization(playerRig, cust); },
+    setPartnerCustomization: function (cust) {
+      try { localStorage.setItem('kanavu-custom-partner', JSON.stringify(cust)); } catch (e) {}
+      applyCustomization(partnerRig, cust);
+    },
+    getHatDefs: function () { return Object.keys(HAT_DEFS).map(function (k) { return { id: k, name: k === 'none' ? 'None' : HAT_DEFS[k].name }; }); },
+    getInstrumentDefs: function () { return Object.keys(INSTRUMENT_DEFS).map(function (k) { return { id: k, name: k === 'none' ? 'None' : INSTRUMENT_DEFS[k].name }; }); },
+    getSkinTones: function () { return SKIN_TONES; },
+    getHairColors: function () { return HAIR_COLORS; },
     getPartnerName: function () { return partnerName; },
     playEmote: function (name) { playEmoteOn(playerRig, name); },
     playPartnerEmote: function (name) { playEmoteOn(partnerRig, name); },
     startHug: startHug,
+    startDance: startDance, stopDance: stopDance,
+    startKissCinematic: startKissCinematic,
+    isDancing: function () { return !!danceState; },
     isHugging: function () { return !!hugState; },
     showGift: showGift,
     spawnHearts: function (n) { spawnHearts(player.position.x, player.position.y + 2.6, player.position.z, n || 6); },

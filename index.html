@@ -43,6 +43,10 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
 #loading{position:fixed;inset:0;z-index:20;display:none;align-items:center;justify-content:center;background:rgba(26,14,18,.85);color:#f5d9a8;font-size:18px;letter-spacing:.2em}
 #loading.visible{display:flex}
 #sound-btn{position:fixed;top:14px;left:14px;z-index:50;display:none;width:44px;height:44px;border-radius:50%;border:2px solid rgba(245,200,110,.85);background:rgba(26,14,18,.85);color:#f5d9a8;font-size:19px;cursor:pointer;backdrop-filter:blur(6px)}
+#island-name-banner{position:fixed;top:14px;left:50%;transform:translateX(-50%);z-index:50;display:none;
+padding:8px 20px;border-radius:20px;border:1px solid rgba(245,200,110,.5);
+background:rgba(26,14,18,.75);color:#f5d9a8;font-size:14px;letter-spacing:.1em;
+backdrop-filter:blur(6px);white-space:nowrap;max-width:70vw;overflow:hidden;text-overflow:ellipsis;}
 #set-btn{position:fixed;top:14px;left:66px;z-index:50;display:none;width:44px;height:44px;border-radius:50%;border:2px solid rgba(245,200,110,.85);background:rgba(26,14,18,.85);color:#f5d9a8;font-size:19px;cursor:pointer;backdrop-filter:blur(6px)}
 #set-panel{position:fixed;z-index:60;top:50%;left:50%;transform:translate(-50%,-50%);width:min(340px,88vw);max-height:82vh;overflow-y:auto;background:rgba(30,16,22,.96);border:1px solid rgba(245,200,110,.35);border-radius:18px;padding:20px;color:#f4e8d8;display:none;backdrop-filter:blur(10px)}
 #set-panel.visible{display:block}
@@ -107,6 +111,7 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
   <canvas id="world-canvas"></canvas>
 </div>
 <button id="sound-btn" title="sound on/off">♪</button>
+<div id="island-name-banner">🏝️ <span id="island-name-text">My Island</span></div>
 <button id="set-btn" title="settings">⚙️</button>
 <div id="set-panel">
   <h3>SETTINGS</h3>
@@ -134,6 +139,20 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
     </div>
   </div>
   <div class="set-row">
+    <span class="set-lbl">🎵 Music</span>
+    <div style="flex:1;display:flex;align-items:center;gap:10px;">
+      <input type="range" id="vol-music" min="0" max="100" value="80" style="flex:1;accent-color:#f5c86e;" />
+      <span id="vol-music-val" style="font-size:12px;color:rgba(244,232,216,.6);min-width:36px;text-align:right;">80%</span>
+    </div>
+  </div>
+  <div class="set-row">
+    <span class="set-lbl">🌿 Nature</span>
+    <div style="flex:1;display:flex;align-items:center;gap:10px;">
+      <input type="range" id="vol-nature" min="0" max="100" value="70" style="flex:1;accent-color:#7fbf6a;" />
+      <span id="vol-nature-val" style="font-size:12px;color:rgba(244,232,216,.6);min-width:36px;text-align:right;">70%</span>
+    </div>
+  </div>
+  <div class="set-row">
     <span class="set-lbl">👕 Outfit</span>
     <div class="set-opts" id="set-outfit" style="flex-wrap:wrap;gap:8px;">
       <!-- M6: free outfit colors; shop sells exclusives -->
@@ -146,22 +165,56 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
     </div>
   </div>
   <div class="set-row">
+    <span class="set-lbl">🏝️ Island</span>
+    <div style="flex:1;display:flex;gap:8px;">
+      <input type="text" id="set-island-name" maxlength="24" placeholder="Name your island" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(245,200,110,.3);background:rgba(0,0,0,.3);color:#f4e8d8;font-family:inherit;" />
+      <button id="set-island-save" class="set-opt" style="padding:8px 14px;">Save</button>
+    </div>
+  </div>
+  <div class="set-row">
     <span class="set-lbl">✏️ Name</span>
     <div style="flex:1;display:flex;gap:8px;">
       <input type="text" id="set-name" maxlength="24" placeholder="Your name" style="flex:1;padding:8px;border-radius:8px;border:1px solid rgba(245,200,110,.3);background:rgba(0,0,0,.3);color:#f4e8d8;font-family:inherit;" />
       <button id="set-name-save" class="set-opt" style="padding:8px 14px;">Save</button>
     </div>
   </div>
+  <div class="set-row">
+    <span class="set-lbl">🎨 Character</span>
+    <div style="flex:1;">
+      <button id="set-customize-open" class="set-opt" style="width:100%;padding:10px;">Customize →</button>
+    </div>
+  </div>
   <button class="btn" id="set-close">Close ✕</button>
+</div>
+
+<!-- Character customization panel -->
+<div id="customize-panel" style="display:none;position:fixed;top:50%;left:50%;transform:translate(-50%,-50%);
+z-index:13000;width:min(92vw,380px);max-height:84vh;overflow-y:auto;
+background:linear-gradient(160deg,rgba(30,22,40,.97),rgba(18,14,28,.97));
+border:1px solid rgba(245,200,110,.35);border-radius:20px;padding:20px;
+box-shadow:0 20px 60px rgba(0,0,0,.6);color:#f4e8d8;font-family:inherit;">
+  <div style="text-align:center;font-size:16px;letter-spacing:.2em;color:rgba(245,200,110,.9);margin-bottom:4px;">🎨 CUSTOMIZE</div>
+  <div style="text-align:center;font-size:12px;color:rgba(244,232,216,.5);margin-bottom:16px;">Make them yours</div>
+  <div style="font-size:13px;color:rgba(245,200,110,.8);margin-bottom:8px;">Skin tone</div>
+  <div id="cust-skins" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+  <div style="font-size:13px;color:rgba(245,200,110,.8);margin-bottom:8px;">Hair color</div>
+  <div id="cust-hairs" style="display:flex;gap:10px;flex-wrap:wrap;margin-bottom:16px;"></div>
+  <div style="font-size:13px;color:rgba(245,200,110,.8);margin-bottom:8px;">Hat</div>
+  <div id="cust-hats" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+  <div style="font-size:13px;color:rgba(245,200,110,.8);margin-bottom:8px;">Instrument</div>
+  <div id="cust-instruments" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+  <div style="font-size:13px;color:rgba(245,200,110,.8);margin-bottom:8px;">👕 My Outfits</div>
+  <div id="cust-outfits" style="display:flex;gap:8px;flex-wrap:wrap;margin-bottom:16px;"></div>
+  <button class="btn" id="customize-close" style="width:100%;">Done ✓</button>
 </div>
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="kanavu-world.js?v=12"></script>
+<script src="kanavu-world.js?v=17"></script>
 <script src="kanavu-multiplayer.js?v=2"></script>
-<script src="kanavu-music.js?v=2"></script>
-<script src="kanavu-ambience.js?v=1"></script>
-<script src="kanavu-social.js?v=4"></script>
+<script src="kanavu-music.js?v=3"></script>
+<script src="kanavu-ambience.js?v=2"></script>
+<script src="kanavu-social.js?v=9"></script>
 <script>
 (function(){
   'use strict';
@@ -502,6 +555,29 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
     setOptSel('set-sound', v);
     if ((v === 'off') === soundOn) soundBtn.click();
   });
+  /* Volume sliders: music + nature */
+  var volMusic = $('vol-music'), volMusicVal = $('vol-music-val');
+  var volNature = $('vol-nature'), volNatureVal = $('vol-nature-val');
+  try {
+    if (window.KanavuMusic && KanavuMusic.getVolume) {
+      var mv = Math.round(KanavuMusic.getVolume() * 100);
+      volMusic.value = mv; volMusicVal.textContent = mv + '%';
+    }
+    if (window.KanavuAmbience && KanavuAmbience.getVolume) {
+      var nv = Math.round(KanavuAmbience.getVolume() * 100);
+      volNature.value = nv; volNatureVal.textContent = nv + '%';
+    }
+  } catch (e) {}
+  volMusic.addEventListener('input', function(){
+    var v = volMusic.value / 100;
+    volMusicVal.textContent = volMusic.value + '%';
+    try { if (window.KanavuMusic && KanavuMusic.setVolume) KanavuMusic.setVolume(v); } catch (e) {}
+  });
+  volNature.addEventListener('input', function(){
+    var v = volNature.value / 100;
+    volNatureVal.textContent = volNature.value + '%';
+    try { if (window.KanavuAmbience && KanavuAmbience.setVolume) KanavuAmbience.setVolume(v); } catch (e) {}
+  });
   /* M6: outfit colors (free base customization; shop sells exclusives) */
   var OUTFIT_COLORS = [
     { id: 'olive', name: 'Olive', c: '#6d7f3c' },
@@ -546,6 +622,20 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
       else localStorage.removeItem('kanavu_anniversary');
     } catch (e) {}
   });
+  /* Island name */
+  var islandInput = $('set-island-name');
+  try { islandInput.value = localStorage.getItem('kanavu-island-name') || ''; } catch (e) {}
+  $('set-island-save').addEventListener('click', function(){
+    var v = islandInput.value.trim().slice(0, 24);
+    if (!v) return;
+    try {
+      if (worldApi && worldApi.setIslandName) worldApi.setIslandName(v);
+      // Sync to partner
+      if (typeof mp !== 'undefined' && mp && mp.sendMsg) {
+        mp.sendMsg('island-name', { name: v });
+      }
+    } catch (e) {}
+  });
   /* Name (editable anytime) */
   var nameInput = $('set-name');
   try { nameInput.value = localStorage.getItem('kanavu_player_name') || ''; } catch (e) {}
@@ -566,7 +656,102 @@ h1.title{font-size:clamp(56px,14vw,110px);font-weight:400;letter-spacing:.12em;t
     // Update the 3D name label
     try { if (worldApi && worldApi.setPlayerName) worldApi.setPlayerName(v); } catch (err) {}
   });
+  /* Character customization panel */
+  $('set-customize-open').addEventListener('click', function(){
+    $('settings-panel').style.display = 'none';
+    openCustomizePanel();
+  });
+  $('customize-close').addEventListener('click', function(){
+    $('customize-panel').style.display = 'none';
+    $('settings-panel').style.display = 'block';
+  });
 })();
+function openCustomizePanel() {
+  var panel = $('customize-panel');
+  panel.style.display = 'block';
+  if (!window.worldApi) return;
+  var cust = worldApi.getCustomization ? worldApi.getCustomization() : {};
+  // Skin tones
+  var skins = $('cust-skins'); skins.innerHTML = '';
+  (worldApi.getSkinTones ? worldApi.getSkinTones() : []).forEach(function (s) {
+    var b = document.createElement('button');
+    b.style.cssText = 'width:40px;height:40px;border-radius:50%;border:2px solid ' +
+      (cust.skin === s.id ? '#f5c86e' : 'rgba(255,255,255,.2)') + ';cursor:pointer;' +
+      'background:#' + s.c.toString(16).padStart(6, '0') + ';';
+    b.title = s.id;
+    b.onclick = function () { updateCust('skin', s.id); };
+    skins.appendChild(b);
+  });
+  // Hair colors
+  var hairs = $('cust-hairs'); hairs.innerHTML = '';
+  (worldApi.getHairColors ? worldApi.getHairColors() : []).forEach(function (h) {
+    var b = document.createElement('button');
+    b.style.cssText = 'width:40px;height:40px;border-radius:50%;border:2px solid ' +
+      (cust.hair === h.id ? '#f5c86e' : 'rgba(255,255,255,.2)') + ';cursor:pointer;' +
+      'background:#' + h.c.toString(16).padStart(6, '0') + ';';
+    b.title = h.id;
+    b.onclick = function () { updateCust('hair', h.id); };
+    hairs.appendChild(b);
+  });
+  // Hats
+  var hats = $('cust-hats'); hats.innerHTML = '';
+  (worldApi.getHatDefs ? worldApi.getHatDefs() : []).forEach(function (h) {
+    var b = document.createElement('button');
+    b.className = 'set-opt';
+    b.style.cssText = 'padding:8px 12px;' + (cust.hat === h.id ? 'border-color:#f5c86e;color:#f5c86e;' : '');
+    b.textContent = h.id === 'none' ? '🚫 None' : h.name;
+    b.onclick = function () { updateCust('hat', h.id); };
+    hats.appendChild(b);
+  });
+  // Instruments
+  var insts = $('cust-instruments'); insts.innerHTML = '';
+  (worldApi.getInstrumentDefs ? worldApi.getInstrumentDefs() : []).forEach(function (it) {
+    var b = document.createElement('button');
+    b.className = 'set-opt';
+    var icons = { none: '🚫 None', guitar: '🎸 Guitar', ukulele: '🎶 Ukulele', flute: '🪈 Flute' };
+    b.style.cssText = 'padding:8px 12px;' + (cust.instrument === it.id ? 'border-color:#f5c86e;color:#f5c86e;' : '');
+    b.textContent = icons[it.id] || it.name;
+    b.onclick = function () { updateCust('instrument', it.id); };
+    insts.appendChild(b);
+  });
+  // Owned outfits (from shop or gifted)
+  var outfits = $('cust-outfits'); outfits.innerHTML = '';
+  try {
+    var inv = (window.KanavuSocial && KanavuSocial.getInventory) ? KanavuSocial.getInventory() : [];
+    var equipped = localStorage.getItem('kanavu-equipped-outfit');
+    if (!inv.length) {
+      outfits.innerHTML = '<div style="font-size:12px;color:rgba(244,232,216,.4);">No outfits yet — visit the 🛍️ Shop!</div>';
+    } else {
+      var shopOutfits = (window.KanavuSocial && KanavuSocial.SHOP_OUTFITS) ? KanavuSocial.SHOP_OUTFITS : [];
+      inv.forEach(function (oid) {
+        var o = shopOutfits.find(function (x) { return x.id === oid; });
+        if (!o) return;
+        var b = document.createElement('button');
+        b.className = 'set-opt';
+        b.style.cssText = 'padding:8px 12px;' + (equipped === oid ? 'border-color:#f5c86e;color:#f5c86e;' : '');
+        b.textContent = o.icon + ' ' + o.name;
+        b.onclick = function () {
+          try {
+            if (window.KanavuSocial && KanavuSocial.equipOutfit) KanavuSocial.equipOutfit(oid);
+            else if (worldApi && worldApi.setOutfitColors) worldApi.setOutfitColors(o.sweater, o.pants);
+            localStorage.setItem('kanavu-equipped-outfit', oid);
+          } catch (e) {}
+          openCustomizePanel();
+        };
+        outfits.appendChild(b);
+      });
+    }
+  } catch (e) {}
+}
+function updateCust(key, val) {
+  if (!window.worldApi || !worldApi.getCustomization) return;
+  var cust = worldApi.getCustomization();
+  cust[key] = val;
+  worldApi.setCustomization(cust);
+  // Broadcast to partner
+  try { if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('custom', cust); } catch (e) {}
+  openCustomizePanel(); // refresh selection highlights
+}
 /* M2: service worker + soft notification nudges */
 (function(){
   if (!('serviceWorker' in navigator)) return;

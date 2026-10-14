@@ -58,7 +58,7 @@ function initCtx() {
   var AC = window.AudioContext || window.webkitAudioContext;
   ctx = new AC();
   master = ctx.createGain();
-  master.gain.value = 0.42; // gentle overall
+  master.gain.value = getVolume() * 0.6; // saved nature volume
   master.connect(ctx.destination);
   startWind();
   startWaves();
@@ -230,9 +230,23 @@ function toggle() {
   start(); return true;
 }
 
+function setVolume(v) { // 0..1
+  try {
+    var vol = Math.max(0, Math.min(1, v));
+    localStorage.setItem('kanavu-vol-nature', String(vol));
+    if (master) master.gain.setTargetAtTime(vol * 0.7, ctx.currentTime, 0.5);
+  } catch (e) {}
+}
+function getVolume() {
+  try {
+    var v = parseFloat(localStorage.getItem('kanavu-vol-nature'));
+    return isNaN(v) ? 0.7 : v;
+  } catch (e) { return 0.7; }
+}
 window.KanavuAmbience = {
   start: start, stop: stop, toggle: toggle,
   isPlaying: function () { return playing; },
-  version: 'nature-1.0'
+  setVolume: setVolume, getVolume: getVolume,
+  version: 'nature-1.1'
 };
 })();

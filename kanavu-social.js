@@ -550,6 +550,408 @@ function onGroundTap(x, z) {
 }
 
 /* ---------------- M8: Miss You button ---------------- */
+/* M8: Hidden gift hunts with riddles and hot/cold hints */
+var HUNT_KEY = 'kanavu-gift-hunt-v1';
+function getHunt() {
+  try {
+    var raw = localStorage.getItem(HUNT_KEY);
+    return raw ? JSON.parse(raw) : null;
+  } catch (e) { return null; }
+}
+function startGiftHunt() {
+  try {
+    var pos = worldApi.getPlayerPos();
+    if (!pos) return;
+    var riddles = [
+      'Where the wheel turns and lights glow bright 🎡',
+      'By the shore where waves meet sand 🌊',
+      'Where stories live and books are grand 📖',
+      'At the house where love resides 🏠',
+      'Where pumpkins grin on spooky night 🎃'
+    ];
+    var riddle = riddles[Math.floor(Math.random() * riddles.length)];
+    var hunt = { x: pos.x, z: pos.z, riddle: riddle, from: myName || 'me', active: true, found: false };
+    localStorage.setItem(HUNT_KEY, JSON.stringify(hunt));
+    if (typeof mp !== 'undefined' && mp && mp.sendMsg) {
+      mp.sendMsg('gift-hunt', { x: pos.x, z: pos.z, riddle: riddle, from: hunt.from });
+    }
+    toast('🎁 Gift hidden! Your partner got the riddle!');
+    addDreamPoints(10, 'hid a gift');
+  } catch (e) {}
+}
+function checkHuntProximity() {
+  var hunt = getHunt();
+  if (!hunt || !hunt.active || hunt.found) return;
+  try {
+    var pos = worldApi.getPlayerPos();
+    if (!pos) return;
+    var dist = Math.hypot(hunt.x - pos.x, hunt.z - pos.z);
+    if (dist < 4) {
+      hunt.found = true;
+      localStorage.setItem(HUNT_KEY, JSON.stringify(hunt));
+      toast('🎁 You found the hidden gift from ' + hunt.from + '!');
+      addDreamPoints(25, 'found hidden gift');
+      try { if (worldApi && worldApi.shootingStar) worldApi.shootingStar(); } catch (e) {}
+    }
+  } catch (e) {}
+}
+function getHuntHint() {
+  var hunt = getHunt();
+  if (!hunt || !hunt.active || hunt.found) return null;
+  try {
+    var pos = worldApi.getPlayerPos();
+    if (!pos) return null;
+    var dist = Math.hypot(hunt.x - pos.x, hunt.z - pos.z);
+    if (dist < 10) return '🔥 Burning hot!';
+    if (dist < 25) return '🌡️ Warm...';
+    if (dist < 50) return '❄️ Cold';
+    return '🧊 Freezing!';
+  } catch (e) { return null; }
+}
+/* M8: Time capsules (message, open date) */
+var CAPSULE_KEY = 'kanavu-capsules-v1';
+function getCapsules() {
+  try {
+    var raw = localStorage.getItem(CAPSULE_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function addCapsule(text, openDate, from) {
+  try {
+    var caps = getCapsules();
+    caps.push({ text: text, openDate: openDate, from: from || 'me', created: new Date().toISOString().slice(0, 10), opened: false });
+    localStorage.setItem(CAPSULE_KEY, JSON.stringify(caps));
+  } catch (e) {}
+}
+function checkCapsules() {
+  var caps = getCapsules();
+  var today = new Date().toISOString().slice(0, 10);
+  var changed = false;
+  caps.forEach(function (c) {
+    if (!c.opened && c.openDate <= today) {
+      c.opened = true;
+      changed = true;
+      // Show the capsule!
+      setTimeout(function () {
+        var m = el('div', 'position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;' +
+          'background:rgba(20,10,14,.85);backdrop-filter:blur(6px);' + BASE_FONT);
+        m.innerHTML =
+          '<div style="background:linear-gradient(180deg,#3a2126,#241318);border:1px solid rgba(245,200,110,.5);' +
+          'border-radius:20px;padding:32px;max-width:380px;width:90%;color:#f4e8d8;text-align:center;">' +
+          '<div style="font-size:48px;margin-bottom:12px;">⏳</div>' +
+          '<div style="font-size:13px;letter-spacing:.2em;color:rgba(245,200,110,.8);margin-bottom:12px;">TIME CAPSULE</div>' +
+          '<div style="font-size:15px;line-height:1.6;margin-bottom:12px;font-style:italic;">"' + escHtml(c.text) + '"</div>' +
+          '<div style="font-size:12px;color:rgba(244,232,216,.5);">— ' + escHtml(c.from) + ' · buried ' + c.created + '</div>' +
+          '<br><button id="ks-cap-close" style="padding:12px 32px;border:none;border-radius:12px;cursor:pointer;' +
+          'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:14px;">💛</button></div>';
+        document.body.appendChild(m);
+        m.querySelector('#ks-cap-close').onclick = function () { document.body.removeChild(m); };
+      }, 2000);
+      addDreamPoints(20, 'opened a time capsule');
+    }
+  });
+  if (changed) {
+    try { localStorage.setItem(CAPSULE_KEY, JSON.stringify(caps)); } catch (e) {}
+  }
+}
+/* M8: Dream board (dreams, notes, completed pins) */
+var DREAM_KEY = 'kanavu-dreams-v1';
+function getDreams() {
+  try {
+    var raw = localStorage.getItem(DREAM_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function addDream(text, emoji) {
+  try {
+    var dreams = getDreams();
+    dreams.push({ text: text, emoji: emoji || '💭', done: false, by: myName || 'us', date: new Date().toISOString().slice(0, 10) });
+    localStorage.setItem(DREAM_KEY, JSON.stringify(dreams));
+  } catch (e) {}
+}
+function toggleDream(idx) {
+  try {
+    var dreams = getDreams();
+    if (dreams[idx]) {
+      dreams[idx].done = !dreams[idx].done;
+      localStorage.setItem(DREAM_KEY, JSON.stringify(dreams));
+      if (dreams[idx].done) addDreamPoints(15, 'dream completed!');
+    }
+  } catch (e) {}
+}
+/* M8: Morning notes (after sleep-together) */
+var MORNING_KEY = 'kanavu-morning-notes-v1';
+function getMorningNotes() {
+  try {
+    var raw = localStorage.getItem(MORNING_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function openMorningNote() {
+  var m = el('div', 'position:fixed;inset:0;z-index:200;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(20,10,14,.85);backdrop-filter:blur(6px);' + BASE_FONT);
+  m.innerHTML =
+    '<div style="background:linear-gradient(180deg,#3a2126,#241318);border:1px solid rgba(245,200,110,.5);' +
+    'border-radius:20px;padding:32px;max-width:380px;width:90%;color:#f4e8d8;text-align:center;">' +
+    '<div style="font-size:48px;margin-bottom:12px;">🌅</div>' +
+    '<div style="font-size:13px;letter-spacing:.2em;color:rgba(245,200,110,.8);margin-bottom:12px;">GOOD MORNING</div>' +
+    '<div style="font-size:14px;margin-bottom:16px;">Leave a morning note for your partner 💛</div>' +
+    '<textarea id="ks-morning-text" rows="3" maxlength="200" placeholder="Good morning..." ' +
+    'style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(245,200,110,.3);' +
+    'background:rgba(0,0,0,.3);color:#f4e8d8;font-family:inherit;font-size:14px;margin-bottom:12px;"></textarea>' +
+    '<button id="ks-morning-save" style="padding:12px 32px;border:none;border-radius:12px;cursor:pointer;' +
+    'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:14px;">Send 💛</button>' +
+    '<br><button id="ks-morning-skip" style="margin-top:12px;background:none;border:none;color:rgba(244,232,216,.45);' +
+    'font-family:inherit;font-size:13px;cursor:pointer;">skip</button></div>';
+  document.body.appendChild(m);
+  m.querySelector('#ks-morning-skip').onclick = function () { document.body.removeChild(m); };
+  m.querySelector('#ks-morning-save').onclick = function () {
+    var text = m.querySelector('#ks-morning-text').value.trim().slice(0, 200);
+    if (text) {
+      try {
+        if (typeof mp !== 'undefined' && mp && mp.sendMsg) {
+          mp.sendMsg('morning-note', { text: text, from: myName || 'me' });
+        }
+      } catch (e) {}
+      toast('💛 Morning note sent!');
+      addDreamPoints(5, 'morning note');
+    }
+    document.body.removeChild(m);
+  };
+}
+function openDreamBoard() {
+  var m = el('div', 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(20,10,14,.72);backdrop-filter:blur(4px);' + BASE_FONT);
+  m.innerHTML =
+    '<div style="background:linear-gradient(180deg,#3a2126,#241318);border:1px solid rgba(245,200,110,.4);' +
+    'border-radius:20px;padding:28px 30px;max-width:400px;width:92%;color:#f4e8d8;text-align:center;max-height:86vh;overflow-y:auto;">' +
+    '<div style="font-size:40px;margin-bottom:8px;">📌</div>' +
+    '<div style="font-size:13px;letter-spacing:.2em;color:rgba(245,200,110,.8);margin-bottom:16px;">OUR DREAM BOARD</div>' +
+    '<div style="display:flex;gap:8px;margin-bottom:16px;">' +
+    '<input id="ks-dream-text" maxlength="80" placeholder="A dream we share..." ' +
+    'style="flex:1;padding:10px;border-radius:10px;border:1px solid rgba(245,200,110,.3);' +
+    'background:rgba(0,0,0,.3);color:#f4e8d8;font-family:inherit;font-size:14px;" />' +
+    '<button id="ks-dream-add" style="padding:10px 18px;border:none;border-radius:10px;cursor:pointer;' +
+    'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:14px;">Pin</button>' +
+    '</div>' +
+    '<div id="ks-dream-list" style="text-align:left;"></div>' +
+    '<div style="font-size:13px;color:rgba(245,200,110,.8);margin:16px 0 8px;text-align:left;">🎨 Draw a dream</div>' +
+    '<canvas id="ks-dream-canvas" width="320" height="200" style="width:100%;border-radius:10px;' +
+    'border:1px solid rgba(245,200,110,.3);background:rgba(0,0,0,.4);touch-action:none;cursor:crosshair;"></canvas>' +
+    '<div style="display:flex;gap:8px;justify-content:center;margin-top:8px;">' +
+    '<button id="ks-draw-clear" style="padding:8px 16px;border:1px solid rgba(245,200,110,.4);border-radius:8px;' +
+    'background:none;color:#f5c86e;font-family:inherit;font-size:13px;cursor:pointer;">Clear</button>' +
+    '<button id="ks-draw-save" style="padding:8px 16px;border:none;border-radius:8px;cursor:pointer;' +
+    'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:13px;">Pin drawing 📌</button>' +
+    '</div>' +
+    '<div id="ks-drawings-list" style="margin-top:12px;text-align:left;"></div>' +
+    '<br><button id="ks-dream-close" style="background:none;border:none;color:rgba(244,232,216,.45);' +
+    'font-family:inherit;font-size:13px;cursor:pointer;">close</button></div>';
+  document.body.appendChild(m);
+  m.querySelector('#ks-dream-close').onclick = function () { document.body.removeChild(m); };
+  m.addEventListener('click', function (e) { if (e.target === m) document.body.removeChild(m); });
+  function renderDreams() {
+    var list = m.querySelector('#ks-dream-list');
+    var dreams = getDreams();
+    list.innerHTML = '';
+    if (!dreams.length) {
+      list.innerHTML = '<div style="font-size:13px;color:rgba(244,232,216,.4);text-align:center;">No dreams yet. Pin your first one! ✨</div>';
+      return;
+    }
+    dreams.forEach(function (d, idx) {
+      var div = el('div', 'background:' + (d.done ? 'rgba(127,191,106,.12)' : 'rgba(0,0,0,.3)') + ';' +
+        'border:1px solid ' + (d.done ? 'rgba(127,191,106,.4)' : 'rgba(245,200,110,.2)') + ';' +
+        'border-radius:10px;padding:10px 12px;margin-bottom:8px;display:flex;align-items:center;gap:10px;');
+      div.innerHTML =
+        '<div style="font-size:24px;">' + (d.done ? '✅' : d.emoji) + '</div>' +
+        '<div style="flex:1;">' +
+        '<div style="font-size:14px;' + (d.done ? 'text-decoration:line-through;opacity:.6;' : '') + '">' + escHtml(d.text) + '</div>' +
+        '<div style="font-size:11px;color:rgba(244,232,216,.45);">— ' + escHtml(d.by) + ' · ' + d.date + '</div>' +
+        '</div>';
+      var btn = el('button', 'padding:6px 12px;border:none;border-radius:8px;cursor:pointer;font-family:inherit;font-size:12px;' +
+        (d.done ? 'background:rgba(255,255,255,.1);color:rgba(244,232,216,.6);' : 'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;'),
+        d.done ? 'Undo' : 'Done!');
+      btn.onclick = function () {
+        toggleDream(idx);
+        try {
+          if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('dream-toggle', { idx: idx });
+        } catch (e) {}
+        renderDreams();
+      };
+      div.appendChild(btn);
+      list.appendChild(div);
+    });
+  }
+  renderDreams();
+  m.querySelector('#ks-dream-add').onclick = function () {
+    var text = m.querySelector('#ks-dream-text').value.trim().slice(0, 80);
+    if (!text) return;
+    var emojis = ['💭', '✈️', '🏠', '🌟', '💛', '🎵'];
+    var emoji = emojis[Math.floor(Math.random() * emojis.length)];
+    addDream(text, emoji);
+    try {
+      if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('dream', { text: text, emoji: emoji, by: myName || 'us' });
+    } catch (e) {}
+    m.querySelector('#ks-dream-text').value = '';
+    addDreamPoints(5, 'pinned a dream');
+    renderDreams();
+  };
+  /* Drawing canvas */
+  var canvas = m.querySelector('#ks-dream-canvas');
+  var ctx2d = canvas.getContext('2d');
+  var drawing = false, lastX = 0, lastY = 0;
+  ctx2d.strokeStyle = '#f5c86e';
+  ctx2d.lineWidth = 3;
+  ctx2d.lineCap = 'round';
+  function getPos(e) {
+    var rect = canvas.getBoundingClientRect();
+    var cx = (e.touches && e.touches[0] ? e.touches[0].clientX : e.clientX) - rect.left;
+    var cy = (e.touches && e.touches[0] ? e.touches[0].clientY : e.clientY) - rect.top;
+    return { x: cx * (canvas.width / rect.width), y: cy * (canvas.height / rect.height) };
+  }
+  canvas.addEventListener('pointerdown', function (e) {
+    drawing = true;
+    var p = getPos(e);
+    lastX = p.x; lastY = p.y;
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointermove', function (e) {
+    if (!drawing) return;
+    var p = getPos(e);
+    ctx2d.beginPath();
+    ctx2d.moveTo(lastX, lastY);
+    ctx2d.lineTo(p.x, p.y);
+    ctx2d.stroke();
+    lastX = p.x; lastY = p.y;
+    e.preventDefault();
+  });
+  canvas.addEventListener('pointerup', function () { drawing = false; });
+  canvas.addEventListener('pointerleave', function () { drawing = false; });
+  m.querySelector('#ks-draw-clear').onclick = function () {
+    ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+  };
+  m.querySelector('#ks-draw-save').onclick = function () {
+    try {
+      var dataUrl = canvas.toDataURL('image/png');
+      var drawings = getDrawings();
+      drawings.unshift({ img: dataUrl, by: myName || 'us', date: new Date().toISOString().slice(0, 10) });
+      localStorage.setItem('kanavu-drawings-v1', JSON.stringify(drawings.slice(0, 20)));
+      ctx2d.clearRect(0, 0, canvas.width, canvas.height);
+      renderDrawings();
+      addDreamPoints(8, 'drew a dream');
+      try {
+        if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('drawing', { img: dataUrl, by: myName || 'us' });
+      } catch (e) {}
+      toast('🎨 Drawing pinned!');
+    } catch (e) { toast('Could not save drawing'); }
+  };
+  function getDrawings() {
+    try {
+      var raw = localStorage.getItem('kanavu-drawings-v1');
+      return raw ? JSON.parse(raw) : [];
+    } catch (e) { return []; }
+  }
+  function renderDrawings() {
+    var list = m.querySelector('#ks-drawings-list');
+    var drawings = getDrawings();
+    list.innerHTML = '';
+    drawings.forEach(function (d) {
+      var div = el('div', 'background:rgba(0,0,0,.3);border-radius:10px;padding:8px;margin-bottom:8px;');
+      div.innerHTML = '<img src="' + d.img + '" style="width:100%;border-radius:8px;" />' +
+        '<div style="font-size:11px;color:rgba(244,232,216,.45);margin-top:4px;">— ' + escHtml(d.by) + ' · ' + d.date + '</div>';
+      list.appendChild(div);
+    });
+  }
+  renderDrawings();
+}
+function openTimeCapsule() {
+  var m = el('div', 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(20,10,14,.72);backdrop-filter:blur(4px);' + BASE_FONT);
+  var caps = getCapsules();
+  var listHtml = '';
+  if (!caps.length) {
+    listHtml = '<div style="font-size:13px;color:rgba(244,232,216,.4);">No capsules yet. Bury your first one! ⏳</div>';
+  } else {
+    caps.forEach(function (c) {
+      var status = c.opened ? '📭 Opened' : '⏳ Opens ' + c.openDate;
+      listHtml += '<div style="background:rgba(0,0,0,.3);border-radius:10px;padding:10px;margin-bottom:8px;text-align:left;">' +
+        '<div style="font-size:13px;margin-bottom:4px;">' + (c.opened ? escHtml(c.text).slice(0, 60) + '...' : '🔒 Sealed') + '</div>' +
+        '<div style="font-size:11px;color:rgba(244,232,216,.45);">' + status + ' · ' + escHtml(c.from) + '</div></div>';
+    });
+  }
+  m.innerHTML =
+    '<div style="background:linear-gradient(180deg,#3a2126,#241318);border:1px solid rgba(245,200,110,.4);' +
+    'border-radius:20px;padding:28px 30px;max-width:380px;width:90%;color:#f4e8d8;text-align:center;max-height:84vh;overflow-y:auto;">' +
+    '<div style="font-size:40px;margin-bottom:8px;">⏳</div>' +
+    '<div style="font-size:13px;letter-spacing:.2em;color:rgba(245,200,110,.8);margin-bottom:16px;">TIME CAPSULES</div>' +
+    '<textarea id="ks-cap-text" rows="3" maxlength="280" placeholder="A message for the future..." ' +
+    'style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(245,200,110,.3);' +
+    'background:rgba(0,0,0,.3);color:#f4e8d8;font-family:inherit;font-size:14px;margin-bottom:8px;"></textarea>' +
+    '<input type="date" id="ks-cap-date" style="width:100%;padding:10px;border-radius:10px;' +
+    'border:1px solid rgba(245,200,110,.3);background:rgba(0,0,0,.3);color:#f4e8d8;font-family:inherit;margin-bottom:8px;" />' +
+    '<button id="ks-cap-bury" style="padding:12px 28px;border:none;border-radius:12px;cursor:pointer;' +
+    'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:14px;margin-bottom:16px;">Bury it 📌</button>' +
+    '<div style="text-align:left;">' + listHtml + '</div>' +
+    '<br><button id="ks-cap-close" style="background:none;border:none;color:rgba(244,232,216,.45);' +
+    'font-family:inherit;font-size:13px;cursor:pointer;">close</button></div>';
+  document.body.appendChild(m);
+  m.querySelector('#ks-cap-close').onclick = function () { document.body.removeChild(m); };
+  m.addEventListener('click', function (e) { if (e.target === m) document.body.removeChild(m); });
+  // Set min date to tomorrow
+  try {
+    var tomorrow = new Date();
+    tomorrow.setDate(tomorrow.getDate() + 1);
+    m.querySelector('#ks-cap-date').min = tomorrow.toISOString().slice(0, 10);
+  } catch (e) {}
+  m.querySelector('#ks-cap-bury').onclick = function () {
+    var text = m.querySelector('#ks-cap-text').value.trim().slice(0, 280);
+    var date = m.querySelector('#ks-cap-date').value;
+    if (!text || !date) { toast('Write a message and pick a date!'); return; }
+    addCapsule(text, date, myName || 'me');
+    try {
+      if (typeof mp !== 'undefined' && mp && mp.sendMsg) {
+        mp.sendMsg('capsule', { text: text, openDate: date, from: myName || 'me' });
+      }
+    } catch (e) {}
+    toast('⏳ Capsule buried! Opens ' + date);
+    addDreamPoints(10, 'buried a time capsule');
+    document.body.removeChild(m);
+  };
+}
+function openGiftHunt() {  var hunt = getHunt();
+  var m = el('div', 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(20,10,14,.72);backdrop-filter:blur(4px);' + BASE_FONT);
+  var content = '';
+  if (hunt && hunt.active && !hunt.found) {
+    var hint = getHuntHint();
+    content =
+      '<div style="font-size:40px;margin-bottom:8px;">🗺️</div>' +
+      '<div style="font-size:14px;margin-bottom:12px;line-height:1.5;">Riddle from ' + escHtml(hunt.from) + ':<br>' +
+      '<em>"' + escHtml(hunt.riddle) + '"</em></div>' +
+      '<div style="font-size:16px;margin-bottom:16px;">' + (hint || '') + '</div>' +
+      '<div style="font-size:12px;color:rgba(244,232,216,.5);">Walk around — you\'ll feel it when you\'re close!</div>';
+  } else {
+    content =
+      '<div style="font-size:40px;margin-bottom:8px;">🎁</div>' +
+      '<div style="font-size:14px;margin-bottom:16px;line-height:1.5;">Hide a gift where you stand.<br>Your partner gets a riddle + hot/cold hints!</div>' +
+      '<button id="ks-hunt-start" style="padding:12px 28px;border:none;border-radius:12px;cursor:pointer;' +
+      'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:14px;">Hide gift here 🎁</button>';
+  }
+  m.innerHTML =
+    '<div style="background:linear-gradient(180deg,#3a2126,#241318);border:1px solid rgba(245,200,110,.4);' +
+    'border-radius:20px;padding:28px 30px;max-width:380px;width:90%;color:#f4e8d8;text-align:center;">' +
+    content +
+    '<br><button id="ks-hunt-close" style="margin-top:16px;background:none;border:none;color:rgba(244,232,216,.45);' +
+    'font-family:inherit;font-size:13px;cursor:pointer;">close</button></div>';
+  document.body.appendChild(m);
+  m.querySelector('#ks-hunt-close').onclick = function () { document.body.removeChild(m); };
+  m.addEventListener('click', function (e) { if (e.target === m) document.body.removeChild(m); });
+  var startBtn = m.querySelector('#ks-hunt-start');
+  if (startBtn) startBtn.onclick = function () {
+    startGiftHunt();
+    document.body.removeChild(m);
+  };
+}
 function sendMissYou() {
   // Haptic
   try { if (navigator.vibrate) navigator.vibrate(50); } catch (e) {}
@@ -925,9 +1327,141 @@ function toast(msg, ms) {
   }, ms || 3800);
 }
 function escHtml(s) {
-  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {
-    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
+  return String(s == null ? '' : s).replace(/[&<>"']/g, function (c) {    return { '&': '&amp;', '<': '&lt;', '>': '&gt;', '"': '&quot;', "'": '&#39;' }[c];
   });
+}
+
+/* ---------------- notification center ---------------- */
+var NOTIF_KEY = 'kanavu-notifications-v1';
+var notifBell = null, notifBadge = null, notifPanel = null;
+function getNotifications() {
+  try {
+    var raw = localStorage.getItem(NOTIF_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function addNotification(icon, text, type) {
+  try {
+    var notifs = getNotifications();
+    notifs.unshift({
+      icon: icon, text: text, type: type || 'info',
+      time: Date.now(), read: false
+    });
+    // Keep last 30
+    if (notifs.length > 30) notifs = notifs.slice(0, 30);
+    localStorage.setItem(NOTIF_KEY, JSON.stringify(notifs));
+    updateNotifBadge();
+    // Also show as toast for immediacy
+    toast(icon + ' ' + text);
+  } catch (e) {}
+}
+function updateNotifBadge() {
+  try {
+    var notifs = getNotifications();
+    var unread = notifs.filter(function (n) { return !n.read; }).length;
+    if (notifBadge) {
+      notifBadge.style.display = unread > 0 ? 'flex' : 'none';
+      notifBadge.textContent = unread > 9 ? '9+' : String(unread);
+    }
+  } catch (e) {}
+}
+function markNotifsRead() {
+  try {
+    var notifs = getNotifications();
+    notifs.forEach(function (n) { n.read = true; });
+    localStorage.setItem(NOTIF_KEY, JSON.stringify(notifs));
+    updateNotifBadge();
+  } catch (e) {}
+}
+function buildNotifBell() {
+  var wrap = el('div', 'position:relative;');
+  notifBell = el('button', btnCss(), '🔔');
+  notifBell.setAttribute('aria-label', 'Notifications');
+  notifBell.title = 'Notifications';
+  notifBadge = el('div', 'position:absolute;top:-4px;right:-4px;min-width:20px;height:20px;' +
+    'background:#e74c3c;color:#fff;font-size:11px;font-weight:bold;border-radius:10px;' +
+    'display:none;align-items:center;justify-content:center;padding:0 5px;' +
+    'border:2px solid rgba(20,12,18,.9);');
+  wrap.appendChild(notifBell);
+  wrap.appendChild(notifBadge);
+  notifBell.onclick = function () { toggleNotifPanel(); };
+  updateNotifBadge();
+  return wrap;
+}
+function toggleNotifPanel() {
+  if (notifPanel) {
+    document.body.removeChild(notifPanel);
+    notifPanel = null;
+    return;
+  }
+  notifPanel = el('div', 'position:fixed;top:70px;right:14px;z-index:120;width:min(340px,88vw);' +
+    'max-height:60vh;overflow-y:auto;background:linear-gradient(160deg,rgba(30,22,40,.97),rgba(18,14,28,.97));' +
+    'border:1px solid rgba(245,200,110,.35);border-radius:16px;padding:16px;' +
+    'box-shadow:0 16px 48px rgba(0,0,0,.6);' + BASE_FONT);
+  var notifs = getNotifications();
+  var html = '<div style="font-size:13px;letter-spacing:.2em;color:rgba(245,200,110,.9);' +
+    'margin-bottom:12px;text-align:center;">🔔 NOTIFICATIONS</div>';
+  if (!notifs.length) {
+    html += '<div style="text-align:center;font-size:13px;color:rgba(244,232,216,.4);padding:20px;">' +
+      'All quiet... for now 💛</div>';
+  } else {
+    notifs.forEach(function (n) {
+      var timeAgo = getTimeAgo(n.time);
+      html += '<div style="background:' + (n.read ? 'rgba(0,0,0,.2)' : 'rgba(245,200,110,.08)') + ';' +
+        'border:1px solid rgba(245,200,110,.2);border-radius:10px;padding:10px 12px;margin-bottom:8px;' +
+        'display:flex;gap:10px;align-items:flex-start;">' +
+        '<div style="font-size:20px;">' + n.icon + '</div>' +
+        '<div style="flex:1;">' +
+        '<div style="font-size:13px;line-height:1.4;">' + escHtml(n.text) + '</div>' +
+        '<div style="font-size:11px;color:rgba(244,232,216,.45);margin-top:4px;">' + timeAgo + '</div>' +
+        '</div></div>';
+    });
+  }
+  notifPanel.innerHTML = html;
+  document.body.appendChild(notifPanel);
+  markNotifsRead();
+  // Close when clicking outside
+  setTimeout(function () {
+    document.addEventListener('click', function closePanel(e) {
+      if (notifPanel && !notifPanel.contains(e.target) && e.target !== notifBell) {
+        document.body.removeChild(notifPanel);
+        notifPanel = null;
+        document.removeEventListener('click', closePanel);
+      }
+    });
+  }, 100);
+}
+function getTimeAgo(ts) {
+  var mins = Math.floor((Date.now() - ts) / 60000);
+  if (mins < 1) return 'just now';
+  if (mins < 60) return mins + 'm ago';
+  var hours = Math.floor(mins / 60);
+  if (hours < 24) return hours + 'h ago';
+  return Math.floor(hours / 24) + 'd ago';
+}
+/* Smart reminders: check for unanswered questions, pending gifts, etc. */
+function checkReminders() {
+  try {
+    // Daily question reminder
+    var today = todayStr();
+    var qAnswered = localStorage.getItem('kanavu-daily-q-' + today);
+    if (!qAnswered) {
+      var lastQRemind = localStorage.getItem('kanavu-q-remind');
+      if (lastQRemind !== today) {
+        localStorage.setItem('kanavu-q-remind', today);
+        addNotification('❓', 'Today\'s question is waiting for you!', 'question');
+      }
+    }
+    // Mood check-in reminder
+    var mood = getMoodToday();
+    if (!mood) {
+      var lastMoodRemind = localStorage.getItem('kanavu-mood-remind');
+      if (lastMoodRemind !== today) {
+        localStorage.setItem('kanavu-mood-remind', today);
+        addNotification('😊', 'How are you feeling today? Check in!', 'mood');
+      }
+    }
+  } catch (e) {}
 }
 
 /* ---------------- chat (7-day auto-expiry) ---------------- */
@@ -1131,6 +1665,54 @@ function buildHug() {
   };
   setInterval(checkHugProximity, 1500);
   return hugFab;
+}
+/* Kiss: request -> accept -> cinematic */
+function sendKissRequest() {
+  try {
+    if (mp && mp.sendMsg('kiss-request', {})) toast('Kiss request sent 💋');
+  } catch (e) {}
+}
+function showKissRequest(from) {
+  var ov = el('div', 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;' +
+    'background:rgba(20,10,14,.6);' + BASE_FONT);
+  ov.innerHTML =
+    '<div style="background:linear-gradient(180deg,#3a2126,#2a151a);border:1px solid rgba(245,200,110,.4);' +
+    'border-radius:18px;padding:26px 30px;text-align:center;color:#f4e8d8;max-width:300px;">' +
+    '<div style="font-size:40px;margin-bottom:10px;">💋</div>' +
+    '<div style="font-size:16px;margin-bottom:18px;">' + escHtml(from) + ' wants to kiss you?</div>' +
+    '<div style="display:flex;gap:10px;justify-content:center;">' +
+    '<button id="ks-kiss-yes" style="padding:11px 22px;border:none;border-radius:12px;cursor:pointer;' +
+    'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:14px;">Kiss back</button>' +
+    '<button id="ks-kiss-no" style="padding:11px 22px;border:1px solid rgba(245,200,110,.4);border-radius:12px;cursor:pointer;' +
+    'background:transparent;color:#f5d9a8;font-family:inherit;font-size:14px;">Not now</button>' +
+    '</div></div>';
+  document.body.appendChild(ov);
+  ov.querySelector('#ks-kiss-yes').onclick = function () {
+    document.body.removeChild(ov);
+    if (mp) mp.sendMsg('kiss-accept', {});
+    try { worldApi.startKissCinematic(); } catch (e) {}
+  };
+  ov.querySelector('#ks-kiss-no').onclick = function () {
+    document.body.removeChild(ov);
+    if (mp) mp.sendMsg('kiss-decline', {});
+  };
+}
+/* Romantic overlay during kiss cinematic (soft vignette + glow) */
+var kissOverlay = null;
+function showKissOverlay() {
+  if (kissOverlay) return;
+  kissOverlay = el('div', 'position:fixed;inset:0;z-index:100;pointer-events:none;' +
+    'background:radial-gradient(ellipse at center, transparent 40%, rgba(255,150,180,.18) 75%, rgba(180,60,90,.35) 100%);' +
+    'transition:opacity 1.5s;opacity:0;');
+  document.body.appendChild(kissOverlay);
+  requestAnimationFrame(function () { if (kissOverlay) kissOverlay.style.opacity = '1'; });
+}
+function hideKissOverlay() {
+  if (!kissOverlay) return;
+  var ov = kissOverlay;
+  kissOverlay = null;
+  ov.style.opacity = '0';
+  setTimeout(function () { if (ov.parentNode) ov.parentNode.removeChild(ov); }, 1600);
 }
 function showHugRequest(from) {
   var ov = el('div', 'position:fixed;inset:0;z-index:130;display:flex;align-items:center;justify-content:center;' +
@@ -1396,6 +1978,35 @@ var BUILDING_INFO = {
   house: { icon: '🏠', name: "Couple's House", blurb: 'Your cozy corner of the island.' },
   barn: { icon: '🎃', name: 'Halloween Barn', blurb: 'Kanavu Autumn Barn — the Halloween Barn Festival is on! Grab some hot cider and pick a pumpkin.' }
 };
+/* Shop outfits (buy with Dream points) */
+var SHOP_OUTFITS = [
+  { id: 'midnight', name: 'Midnight', icon: '🌙', cost: 80, sweater: '#2c3e50', pants: '#1a1a2e' },
+  { id: 'sunset', name: 'Sunset', icon: '🌅', cost: 100, sweater: '#e67e22', pants: '#6e2c00' },
+  { id: 'forest', name: 'Forest', icon: '🌲', cost: 60, sweater: '#27ae60', pants: '#1e3a2a' },
+  { id: 'royal', name: 'Royal', icon: '👑', cost: 150, sweater: '#8e44ad', pants: '#2c1a3a' },
+  { id: 'candy', name: 'Candy', icon: '🍬', cost: 120, sweater: '#ff8ab0', pants: '#5d3a4a' },
+  { id: 'ocean', name: 'Ocean', icon: '🌊', cost: 90, sweater: '#2e86c1', pants: '#1a2a3a' }
+];
+/* Inventory: owned outfit IDs */
+var INV_KEY = 'kanavu-inventory-v1';
+function getInventory() {
+  try {
+    var raw = localStorage.getItem(INV_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function addToInventory(outfitId) {
+  try {
+    var inv = getInventory();
+    if (inv.indexOf(outfitId) < 0) {
+      inv.push(outfitId);
+      localStorage.setItem(INV_KEY, JSON.stringify(inv));
+    }
+  } catch (e) {}
+}
+function hasOutfit(outfitId) {
+  return getInventory().indexOf(outfitId) >= 0;
+}
 /* Building rename (per-island, stored locally) */
 var BNAME_KEY = 'kanavu-building-names-v1';
 function getBuildingNames() {
@@ -1427,6 +2038,24 @@ function openBuilding(type) {
     actions = '<button id="ks-bsleep" style="padding:11px 26px;border:none;border-radius:12px;cursor:pointer;' +
       'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:14px;">😴 Sleep till morning</button>';
   }
+  var shopHtml = '';
+  if (type === 'shop') {
+    shopHtml = '<div id="ks-shop-grid" style="display:grid;grid-template-columns:1fr 1fr;gap:10px;margin:16px 0;"></div>';
+  }
+  var notesHtml = '';
+  if (type === 'bookshop') {
+    notesHtml =
+      '<div style="margin:16px 0;text-align:left;">' +
+      '<div style="font-size:13px;color:rgba(245,200,110,.8);margin-bottom:8px;">📝 Leave a note</div>' +
+      '<textarea id="ks-note-text" rows="3" maxlength="280" placeholder="Write something sweet..." ' +
+      'style="width:100%;padding:10px;border-radius:10px;border:1px solid rgba(245,200,110,.3);' +
+      'background:rgba(0,0,0,.3);color:#f4e8d8;font-family:inherit;font-size:14px;resize:vertical;"></textarea>' +
+      '<button id="ks-note-save" style="margin-top:8px;padding:10px 20px;border:none;border-radius:10px;cursor:pointer;' +
+      'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:14px;">Pin it 📌</button>' +
+      '</div>' +
+      '<div style="font-size:13px;color:rgba(245,200,110,.8);margin:12px 0 8px;text-align:left;">📌 Notes on the board</div>' +
+      '<div id="ks-notes-list" style="max-height:200px;overflow-y:auto;text-align:left;"></div>';
+  }
   m.innerHTML =
     '<div style="background:linear-gradient(180deg,#3a2126,#241318);border:1px solid rgba(245,200,110,.4);' +
     'border-radius:20px;padding:28px 30px;max-width:420px;width:90%;color:#f4e8d8;text-align:center;' +
@@ -1436,6 +2065,8 @@ function openBuilding(type) {
     info.name.toUpperCase() + ' ★</div>' +
     '<div style="font-size:15px;font-style:italic;color:rgba(244,232,216,.75);margin:12px 0 18px;line-height:1.5;">' +
     info.blurb + '</div>' +
+    shopHtml +
+    notesHtml +
     (actions ? '<div style="display:flex;gap:10px;justify-content:center;margin-bottom:6px;">' + actions + '</div>' : '') +
     '<button id="ks-bclose" style="margin-top:10px;background:none;border:none;color:rgba(244,232,216,.45);' +
     'font-family:inherit;font-size:13px;cursor:pointer;">close</button></div>';
@@ -1451,6 +2082,135 @@ function openBuilding(type) {
     document.body.removeChild(m); buildingModal = null;
     try { if (worldApi && worldApi.sleep) worldApi.sleep(); } catch (e) {}
   };
+  /* Shop: outfit grid */
+  var shopGrid = m.querySelector('#ks-shop-grid');
+  if (shopGrid) renderShopGrid(shopGrid);
+  /* Bookshop: notes */
+  var noteText = m.querySelector('#ks-note-text');
+  var noteSave = m.querySelector('#ks-note-save');
+  var notesList = m.querySelector('#ks-notes-list');
+  if (noteSave && notesList) {
+    renderNotesList(notesList);
+    noteSave.onclick = function () {
+      var v = noteText.value.trim().slice(0, 280);
+      if (!v) return;
+      addNote(v);
+      noteText.value = '';
+      renderNotesList(notesList);
+      addDreamPoints(5, 'left a note');
+      // Share with partner
+      try {
+        if (typeof mp !== 'undefined' && mp && mp.sendMsg) {
+          mp.sendMsg('note', { text: v, from: myName || 'me' });
+        }
+      } catch (e) {}
+    };
+  }
+}
+/* Bookshop notes (local + partner) */
+var NOTES_KEY = 'kanavu-notes-v1';
+function getNotes() {
+  try {
+    var raw = localStorage.getItem(NOTES_KEY);
+    return raw ? JSON.parse(raw) : [];
+  } catch (e) { return []; }
+}
+function addNote(text, from) {
+  try {
+    var notes = getNotes();
+    notes.unshift({
+      text: text,
+      from: from || 'me',
+      date: new Date().toISOString().slice(0, 10)
+    });
+    // Keep last 50
+    if (notes.length > 50) notes = notes.slice(0, 50);
+    localStorage.setItem(NOTES_KEY, JSON.stringify(notes));
+  } catch (e) {}
+}
+function renderNotesList(list) {
+  var notes = getNotes();
+  list.innerHTML = '';
+  if (!notes.length) {
+    list.innerHTML = '<div style="font-size:13px;color:rgba(244,232,216,.4);font-style:italic;">No notes yet. Leave the first one! 💛</div>';
+    return;
+  }
+  notes.forEach(function (n) {
+    var div = el('div', 'background:rgba(245,200,110,.08);border:1px solid rgba(245,200,110,.2);' +
+      'border-radius:10px;padding:10px 12px;margin-bottom:8px;');
+    var who = n.from === 'me' ? 'You' : escHtml(n.from || 'Partner');
+    var date = n.date || '';
+    div.innerHTML =
+      '<div style="font-size:14px;line-height:1.4;margin-bottom:4px;">' + escHtml(n.text) + '</div>' +
+      '<div style="font-size:11px;color:rgba(244,232,216,.45);">— ' + who + ' · ' + date + '</div>';
+    list.appendChild(div);
+  });
+}
+function renderShopGrid(grid) {
+  grid.innerHTML = '';
+  SHOP_OUTFITS.forEach(function (o) {
+    var owned = hasOutfit(o.id);
+    var card = el('div', 'background:rgba(0,0,0,.3);border:1px solid rgba(245,200,110,.25);' +
+      'border-radius:12px;padding:12px;text-align:center;');
+    card.innerHTML =
+      '<div style="font-size:32px;margin-bottom:6px;">' + o.icon + '</div>' +
+      '<div style="font-size:13px;font-weight:bold;margin-bottom:4px;">' + o.name + '</div>' +
+      '<div style="display:flex;gap:4px;justify-content:center;margin-bottom:8px;">' +
+      '<div style="width:20px;height:20px;border-radius:50%;background:' + o.sweater + ';border:1px solid rgba(255,255,255,.3);"></div>' +
+      '<div style="width:20px;height:20px;border-radius:50%;background:' + o.pants + ';border:1px solid rgba(255,255,255,.3);"></div>' +
+      '</div>';
+    if (owned) {
+      card.innerHTML += '<div style="font-size:12px;color:#7fbf6a;">✓ Owned</div>' +
+        '<div style="display:flex;gap:6px;justify-content:center;margin-top:8px;">' +
+        '<button data-act="wear" style="padding:8px 14px;border:none;border-radius:8px;cursor:pointer;' +
+        'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:13px;">Wear</button>' +
+        '<button data-act="gift" style="padding:8px 14px;border:none;border-radius:8px;cursor:pointer;' +
+        'background:rgba(245,200,110,.2);color:#f5c86e;border:1px solid rgba(245,200,110,.4);font-family:inherit;font-size:13px;">🎁</button>' +
+        '</div>';
+      card.querySelector('[data-act="wear"]').onclick = function () { equipOutfit(o.id); };
+      card.querySelector('[data-act="gift"]').onclick = function () {
+        try {
+          if (typeof mp !== 'undefined' && mp && mp.sendMsg) {
+            mp.sendMsg('gift-outfit', { id: o.id });
+            toast('🎁 Sent ' + o.name + ' to your partner!');
+          } else {
+            toast('Your partner needs to be online to receive gifts');
+          }
+        } catch (e) {}
+      };
+    } else {
+      card.innerHTML += '<div style="font-size:12px;color:#f5c86e;margin-bottom:4px;">💭 ' + o.cost + '</div>' +
+        '<button style="padding:8px 16px;border:none;border-radius:8px;cursor:pointer;' +
+        'background:linear-gradient(180deg,#ffe9b8,#f5a86e);color:#2a1a12;font-family:inherit;font-size:13px;">Buy</button>';
+      card.querySelector('button').onclick = function () {
+        if (spendDreamPoints(o.cost)) {
+          addToInventory(o.id);
+          toast('🛍️ Bought ' + o.name + '!');
+          renderShopGrid(grid);
+        } else {
+          toast('Not enough Dream points 💭');
+        }
+      };
+    }
+    grid.appendChild(card);
+  });
+}
+function equipOutfit(outfitId) {
+  var o = SHOP_OUTFITS.find(function (x) { return x.id === outfitId; });
+  if (!o) return;
+  try {
+    // Save as equipped outfit
+    localStorage.setItem('kanavu-equipped-outfit', outfitId);
+    // Apply to 3D character
+    if (worldApi && worldApi.setOutfitColors) {
+      worldApi.setOutfitColors(o.sweater, o.pants);
+    }
+    toast('👕 Wearing ' + o.name + '!');
+    // Sync to partner
+    if (typeof mp !== 'undefined' && mp && mp.sendMsg) {
+      mp.sendMsg('outfit', { id: outfitId, sweater: o.sweater, pants: o.pants });
+    }
+  } catch (e) {}
 }
 function renderTheatreQ() {
   if (!theatreQ) return;
@@ -1506,56 +2266,114 @@ function init(w, m) {
 
   buildDreamPointsPill();
   loadDecks().then(function () { /* deck shelf ready */ });
+  // Check for time capsules ready to open
+  setTimeout(checkCapsules, 3000);
+  // Smart reminders (unanswered questions, etc.)
+  setTimeout(checkReminders, 5000);
 
   var bar = el('div', 'position:fixed;right:14px;top:50%;transform:translateY(-50%);z-index:60;' +
-    'display:flex;flex-direction:column;gap:12px;');
+    'display:flex;flex-direction:column;gap:10px;align-items:center;');
+  /* ---- always visible: core actions ---- */
   bar.appendChild(buildChat());
   bar.appendChild(buildEmotes());
   bar.appendChild(buildGifts());
   bar.appendChild(buildHug());
+  // Kiss button
+  var kissFab = el('button', btnCss(), '💋');
+  kissFab.setAttribute('aria-label', 'Kiss');
+  kissFab.title = 'Kiss';
+  kissFab.onclick = function () { sendKissRequest(); };
+  bar.appendChild(kissFab);
   bar.appendChild(buildVoice());
-  // M3: Today button
-  var todayFab = el('button', btnCss(), '📅');
-  todayFab.setAttribute('aria-label', 'Today');
-  todayFab.title = 'Today';
-  todayFab.onclick = function () { openToday(); };
-  bar.appendChild(todayFab);
-  // M7: Mood button
-  var moodFab = el('button', btnCss(), '😊');
-  moodFab.setAttribute('aria-label', 'Mood check-in');
-  moodFab.title = 'Mood';
-  moodFab.onclick = function () { openMood(); };
-  bar.appendChild(moodFab);
-  // M7: Letters button
-  var letterFab = el('button', btnCss(), '💌');
-  letterFab.setAttribute('aria-label', 'Love letters');
-  letterFab.title = 'Letters';
-  letterFab.onclick = function () { openLetters(); };
-  bar.appendChild(letterFab);
-  // M7: Coupons button
-  var couponFab = el('button', btnCss(), '🎟️');
-  couponFab.setAttribute('aria-label', 'Coupons');
-  couponFab.title = 'Coupons';
-  couponFab.onclick = function () { openCoupons(); };
-  bar.appendChild(couponFab);
-  // M8: Miss You button (always available)
-  var missFab = el('button', btnCss(), '💫');
-  missFab.setAttribute('aria-label', 'Miss you');
-  missFab.title = 'Miss you';
-  missFab.onclick = function () { sendMissYou(); };
-  bar.appendChild(missFab);
-  // M5: Games button
-  var gameFab = el('button', btnCss(), '🎮');
-  gameFab.setAttribute('aria-label', 'Games');
-  gameFab.title = 'Games';
-  gameFab.onclick = function () { openGames(); };
-  bar.appendChild(gameFab);
-  // Decorate button
-  var decorFab = el('button', btnCss(), '🌸');
-  decorFab.setAttribute('aria-label', 'Decorate island');
-  decorFab.title = 'Decorate';
-  decorFab.onclick = function () { openDecorate(); };
-  bar.appendChild(decorFab);
+  /* Notification bell */
+  bar.appendChild(buildNotifBell());
+  /* ---- expandable group helper ---- */
+  function makeGroup(icon, label, buttons) {
+    var wrap = el('div', 'display:flex;flex-direction:column;align-items:center;gap:8px;');
+    var tray = el('div', 'display:none;flex-direction:column;gap:8px;' +
+      'background:rgba(20,12,18,.92);border:1px solid rgba(245,200,110,.3);border-radius:16px;padding:10px 8px;' +
+      'backdrop-filter:blur(8px);');
+    buttons.forEach(function (b) { tray.appendChild(b); });
+    var toggle = el('button', btnCss(), icon);
+    toggle.setAttribute('aria-label', label);
+    toggle.title = label;
+    var open = false;
+    toggle.onclick = function () {
+      open = !open;
+      tray.style.display = open ? 'flex' : 'none';
+      toggle.style.borderColor = open ? '#f5c86e' : '';
+      toggle.style.transform = open ? 'scale(1.08)' : '';
+      // Close other groups
+      Array.from(bar.querySelectorAll('[data-group-tray]')).forEach(function (t) {
+        if (t !== tray) t.style.display = 'none';
+      });
+      Array.from(bar.querySelectorAll('[data-group-toggle]')).forEach(function (tg) {
+        if (tg !== toggle) { tg.style.borderColor = ''; tg.style.transform = ''; }
+      });
+    };
+    toggle.setAttribute('data-group-toggle', '1');
+    tray.setAttribute('data-group-tray', '1');
+    wrap.appendChild(tray);
+    wrap.appendChild(toggle);
+    // Label under the icon
+    var lbl = el('div', 'font-size:9px;color:rgba(244,232,216,.55);letter-spacing:.05em;margin-top:-6px;', label);
+    wrap.appendChild(lbl);
+    return wrap;
+  }
+  function fab(icon, label, onclick) {
+    var b = el('button', btnCss(), icon);
+    b.setAttribute('aria-label', label);
+    b.title = label;
+    b.onclick = onclick;
+    return b;
+  }
+  /* ---- ✨ Moments group ---- */
+  var momentsBtns = [
+    fab('💫', 'Miss you', function () { sendMissYou(); }),
+    fab('🔭', 'Stargaze', function () {
+      try { if (worldApi && worldApi.toggleStargazing) worldApi.toggleStargazing(); } catch (e) {}
+    }),
+    fab('🗺️', 'Gift hunt', function () { openGiftHunt(); }),
+    fab('💃', 'Slow dance', function () {
+      try {
+        if (worldApi) {
+          if (worldApi.isDancing && worldApi.isDancing()) {
+            worldApi.stopDance();
+            if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('dance', { on: false });
+          } else {
+            worldApi.startDance();
+            if (typeof mp !== 'undefined' && mp && mp.sendMsg) mp.sendMsg('dance', { on: true });
+            addDreamPoints(10, 'slow dance');
+          }
+        }
+      } catch (e) {}
+    }),
+    fab('😴', 'Sleep together', function () {
+      try {
+        if (worldApi) {
+          if (worldApi.isSleepingTogether && worldApi.isSleepingTogether()) worldApi.wakeUp();
+          else worldApi.startSleepTogether();
+        }
+      } catch (e) {}
+    })
+  ];
+  bar.appendChild(makeGroup('✨', 'Moments', momentsBtns));
+  /* ---- 📌 Memories group ---- */
+  var memoriesBtns = [
+    fab('📅', 'Today', function () { openToday(); }),
+    fab('😊', 'Mood', function () { openMood(); }),
+    fab('💌', 'Letters', function () { openLetters(); }),
+    fab('🎟️', 'Coupons', function () { openCoupons(); }),
+    fab('⏳', 'Time capsules', function () { openTimeCapsule(); }),
+    fab('📌', 'Dream board', function () { openDreamBoard(); })
+  ];
+  bar.appendChild(makeGroup('💭', 'Memories', memoriesBtns));
+  /* ---- 🎮 Play group ---- */
+  var playBtns = [
+    fab('🎮', 'Games', function () { openGames(); }),
+    fab('🌸', 'Decorate', function () { openDecorate(); })
+  ];
+  bar.appendChild(makeGroup('🎮', 'Play', playBtns));
   document.body.appendChild(bar);
 
   // M3: show Today on app open (once per day)
@@ -1576,7 +2394,7 @@ function init(w, m) {
   });
   mp.onMessage('gift', function (m) {
     try { worldApi.showGift(m.data.emoji); } catch (e) {}
-    toast(m.from + ' sent you ' + (m.data.emoji || '🎁') + '!');
+    addNotification('🎁', m.from + ' sent you ' + (m.data.emoji || '🎁') + '!', 'gift');
     // M2: nudge if the app is in background
     try {
       if (document.hidden && window.KanavuNudge) {
@@ -1585,11 +2403,157 @@ function init(w, m) {
     } catch (e) {}
   });
   mp.onMessage('hug-request', function (m) { showHugRequest(m.from); });
-  mp.onMessage('hug-accept', function () {
+  mp.onMessage('kiss-request', function (m) { showKissRequest(m.from); });
+  mp.onMessage('kiss-accept', function () {
+    try { worldApi.startKissCinematic(); } catch (e) {}
+    toast('Kiss! 💋');
+    addDreamPoints(15, 'kiss');
+  });
+  mp.onMessage('kiss-decline', function () { toast('Maybe later 💛'); });  mp.onMessage('hug-accept', function () {
     try { worldApi.startHug(); } catch (e) {}
     toast('Hug! 🤗');
   });
   mp.onMessage('hug-decline', function () { toast('Maybe later 💛'); });
+  mp.onMessage('custom', function (m) {
+    // Partner changed their look — apply it live
+    try {
+      if (worldApi && worldApi.setPartnerCustomization) worldApi.setPartnerCustomization(m.data);
+      toast('✨ Your partner changed their look!');
+    } catch (e) {}
+  });
+  mp.onMessage('island-name', function (m) {
+    // Partner named their island
+    try {
+      if (worldApi && worldApi.setPartnerIslandName) worldApi.setPartnerIslandName(m.data.name || 'Their Island');
+      toast('🏝️ Your partner named their island "' + (m.data.name || 'Their Island') + '"');
+    } catch (e) {}
+  });
+  mp.onMessage('outfit', function (m) {
+    // Partner changed outfit — show it on their character
+    try {
+      if (worldApi && worldApi.setPartnerOutfitColors) {
+        worldApi.setPartnerOutfitColors(m.data.sweater, m.data.pants);
+      }
+    } catch (e) {}
+  });
+  mp.onMessage('gift-outfit', function (m) {
+    // Partner gifted you an outfit — goes to your inventory
+    try {
+      var o = SHOP_OUTFITS.find(function (x) { return x.id === m.data.id; });
+      if (o) {
+        addToInventory(o.id);
+        addNotification('🎁', m.from + ' gifted you the ' + o.name + ' outfit! Check the Shop to wear it.', 'gift');
+      }
+    } catch (e) {}
+  });
+  mp.onMessage('note', function (m) {
+    // Partner left a note at the bookshop
+    try {
+      addNote(m.data.text, m.data.from || m.from || 'Partner');
+      toast('📝 ' + (m.data.from || 'Your partner') + ' left a note at the Bookshop!');
+    } catch (e) {}
+  });
+  mp.onMessage('stargaze', function (m) {
+    // Partner started/stopped stargazing
+    try {
+      if (m.data.on) {
+        toast('🔭 Your partner is stargazing too! Look up!');
+      }
+    } catch (e) {}
+  });
+  mp.onMessage('star', function (m) {
+    // Partner saw a shooting star — show one for us too (synced sky)
+    try {
+      if (worldApi && worldApi.shootingStar) worldApi.shootingStar();
+    } catch (e) {}
+  });
+  mp.onMessage('gift-hunt', function (m) {
+    // Partner hid a gift for us!
+    try {
+      var hunt = { x: m.data.x, z: m.data.z, riddle: m.data.riddle, from: m.data.from || 'Partner', active: true, found: false };
+      localStorage.setItem(HUNT_KEY, JSON.stringify(hunt));
+      toast('🗺️ ' + hunt.from + ' hid a gift for you! Tap 🗺️ for the riddle!');
+    } catch (e) {}
+  });
+  mp.onMessage('capsule', function (m) {
+    // Partner buried a time capsule
+    try {
+      addCapsule(m.data.text, m.data.openDate, m.data.from || 'Partner');
+      toast('⏳ ' + (m.data.from || 'Your partner') + ' buried a time capsule! Opens ' + m.data.openDate);
+    } catch (e) {}
+  });
+  mp.onMessage('dance', function (m) {
+    // Partner started/stopped slow dance
+    try {
+      if (worldApi) {
+        if (m.data.on) {
+          worldApi.startDance();
+          toast('💃 Your partner wants to slow dance!');
+        } else {
+          worldApi.stopDance();
+        }
+      }
+    } catch (e) {}
+  });
+  mp.onMessage('dream', function (m) {
+    // Partner pinned a dream
+    try {
+      addDream(m.data.text, m.data.emoji);
+      toast('📌 ' + (m.data.by || 'Your partner') + ' pinned a dream: ' + m.data.text);
+    } catch (e) {}
+  });
+  mp.onMessage('dream-toggle', function (m) {
+    // Partner completed/undid a dream
+    try { toggleDream(m.data.idx); } catch (e) {}
+  });
+  mp.onMessage('drawing', function (m) {
+    // Partner pinned a drawing
+    try {
+      var drawings = [];
+      try {
+        var raw = localStorage.getItem('kanavu-drawings-v1');
+        drawings = raw ? JSON.parse(raw) : [];
+      } catch (e) {}
+      drawings.unshift({ img: m.data.img, by: m.data.by || 'Partner', date: new Date().toISOString().slice(0, 10) });
+      localStorage.setItem('kanavu-drawings-v1', JSON.stringify(drawings.slice(0, 20)));
+      toast('🎨 ' + (m.data.by || 'Your partner') + ' pinned a drawing!');
+    } catch (e) {}
+  });
+  mp.onMessage('sleep-invite', function (m) {
+    // Partner wants to sleep together
+    try {
+      toast('😴 ' + (m.data.from || 'Your partner') + ' is sleeping... tap 😴 to join them!');
+    } catch (e) {}
+  });
+  mp.onMessage('sleep-join', function (m) {
+    // Partner joined the sleep
+    try {
+      if (worldApi && worldApi.isSleepingTogether && worldApi.isSleepingTogether()) {
+        // Make partner lie down too
+        toast('😴 Your partner joined you! Sweet dreams 💛');
+      }
+    } catch (e) {}
+  });
+  mp.onMessage('sleep-wake', function (m) {
+    // Partner woke up
+    try {
+      if (worldApi && worldApi.isSleepingTogether && worldApi.isSleepingTogether()) {
+        worldApi.wakeUp();
+      }
+    } catch (e) {}
+  });
+  mp.onMessage('morning-note', function (m) {
+    // Morning note from partner
+    try {
+      var notes = getMorningNotes();
+      notes.unshift({ text: m.data.text, from: m.data.from || 'Partner', date: new Date().toISOString().slice(0, 10) });
+      localStorage.setItem(MORNING_KEY, JSON.stringify(notes.slice(0, 20)));
+      // Show it
+      setTimeout(function () {
+        toast('🌅 Morning note from ' + (m.data.from || 'your partner') + ': ' + m.data.text);
+      }, 1000);
+    } catch (e) {}
+  });
   mp.onMessage('question', function (m) {
     var key = (m.data.deck ? m.data.deck + ':' : '') + m.data.q;
     var rec = theatreAnswers[key] || (theatreAnswers[key] = {});
@@ -1691,5 +2655,5 @@ function init(w, m) {
   });
 }
 
-window.KanavuSocial = { init: init, openTheatre: openTheatre, openBuilding: openBuilding, toast: toast, BUILDING_INFO: BUILDING_INFO, addDreamPoints: addDreamPoints, version: 'social-2.0' };
+window.KanavuSocial = { init: init, openTheatre: openTheatre, openBuilding: openBuilding, toast: toast, BUILDING_INFO: BUILDING_INFO, addDreamPoints: addDreamPoints, spendDreamPoints: spendDreamPoints, getInventory: getInventory, SHOP_OUTFITS: SHOP_OUTFITS, equipOutfit: equipOutfit, checkHuntProximity: checkHuntProximity, showKissOverlay: showKissOverlay, hideKissOverlay: hideKissOverlay, openMorningNote: openMorningNote, version: 'social-2.0' };
 })();
