@@ -43,7 +43,7 @@ function initCtx() {
   musicBus = ctx.createGain();
   musicBus.gain.value = getVolume() * 0.9; // saved music volume
   var lp = ctx.createBiquadFilter(); // lofi warmth for the generative engine
-  lp.type = 'lowpass'; lp.frequency.value = 3400; lp.Q.value = 0.4;
+  lp.type = 'lowpass'; lp.frequency.value = 2200; lp.Q.value = 0.4; // darker, warmer: no harsh highs
   musicBus.connect(lp); lp.connect(master);
   // gentle wow/flutter on the generative mix
   var lfo = ctx.createOscillator(); lfo.frequency.value = 0.45;
@@ -113,7 +113,7 @@ function fadeOutTrack() {
 /* ================= generative lofi engine (fallback) ================= */
 var nextTime = 0, step = 0;
 
-var BPM = 64; // lofi indie slow: dreamy and unhurried
+var BPM = 58; // chill slow lofi: deep and unhurried, no rush
 var SIXTEENTH = 60 / BPM / 4;
 var SWING = 0.52; // barely swung: indie, not hip-hop
 
@@ -200,7 +200,7 @@ function pluck(m, t, dur) { // indie fingerpicked guitar: warm triangle, soft at
   o.frequency.value = f;
   var o2 = ctx.createOscillator(); o2.type = 'sine'; o2.frequency.value = f * 2;
   var g2 = ctx.createGain(); g2.gain.value = 0.15;
-  var fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 1800;
+  var fl = ctx.createBiquadFilter(); fl.type = 'lowpass'; fl.frequency.value = 1200; // warm, no high pitch
   var g = ctx.createGain();
   g.gain.setValueAtTime(0.0001, t);
   g.gain.exponentialRampToValueAtTime(0.16, t + 0.02);
@@ -225,11 +225,11 @@ function brush(t) { // soft brushed snare: airy, no crack
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.22);
   n.connect(f); f.connect(g); g.connect(musicBus); n.start(t);
 }
-function shaker(t) { // gentle egg-shaker 8ths
+function shaker(t) { // gentle egg-shaker 8ths (soft, low)
   var n = noiseSrc(0.06);
-  var f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 6000;
+  var f = ctx.createBiquadFilter(); f.type = 'highpass'; f.frequency.value = 4000; // lower, less harsh
   var g = ctx.createGain();
-  g.gain.setValueAtTime(0.045, t);
+  g.gain.setValueAtTime(0.025, t); // quieter
   g.gain.exponentialRampToValueAtTime(0.0001, t + 0.06);
   n.connect(f); f.connect(g); g.connect(musicBus); n.start(t);
 }
@@ -282,21 +282,23 @@ function scheduleStep(s, t) {
   if (stp % 2 === 0) {
     var chord = CHORDS[bar];
     var noteIdx = [0, 1, 2, 3, 2, 1, 2, 3][stp / 2]; // Travis-ish picking
-    pluck(chord[noteIdx] + 12, swingT, 0.35); // soft, high
+    pluck(chord[noteIdx] - 12, swingT, 0.5); // low, warm (one octave down)
   }
   if (KICK[stp]) kick(swingT, true); // soft
   if (SNARE[stp]) brush(swingT); // brushed snare, not cracked
   if (HAT[stp]) shaker(swingT);
 }
 function scheduleMelody(t) {
-  var n = 3 + Math.floor(Math.random() * 3); // 3-5 notes per phrase
+  // Very sparse, low: only 1-2 notes per phrase, one octave down
+  if (Math.random() < 0.5) return; // half the phrases are silent (space to breathe)
+  var n = 1 + Math.floor(Math.random() * 2);
   var idx = Math.floor(Math.random() * SCALE.length);
-  var tt = t + SIXTEENTH * 2;
+  var tt = t + SIXTEENTH * 4;
   for (var i = 0; i < n; i++) {
-    idx += Math.floor(rnd(-3, 4));
+    idx += Math.floor(rnd(-2, 3));
     idx = Math.max(0, Math.min(SCALE.length - 1, idx));
-    pluck(SCALE[idx], tt, rnd(0.5, 0.9));
-    tt += SIXTEENTH * (Math.random() < 0.4 ? 6 : 4); // laid-back spacing
+    pluck(SCALE[idx] - 12, tt, rnd(0.8, 1.2)); // low, warm
+    tt += SIXTEENTH * 8;
   }
 }
 function scheduler() {

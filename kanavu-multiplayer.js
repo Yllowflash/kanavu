@@ -298,7 +298,7 @@ function init(worldApi, opts) {
         state.partnerOnline = online;
         try {
           if (worldApi.setPartnerRemote) worldApi.setPartnerRemote(online);
-          if (worldApi.setPartnerOnline) worldApi.setPartnerOnline(true); // AI fallback when offline
+          if (worldApi.setPartnerOnline) worldApi.setPartnerOnline(online);
         } catch (e) {}
         state.presenceCbs.forEach(function (fn) {
           try { fn({ online: online, name: state.partnerName }); } catch (e) {}
@@ -320,7 +320,15 @@ function init(worldApi, opts) {
   function generateCode() {
     return new Promise(function (resolve, reject) {
       cleanupInvite();
-      var code = randomCode();
+      // Persistent invite code: same for the user every time
+      var code = null;
+      try {
+        code = localStorage.getItem('kanavu-my-invite-code');
+      } catch (e) {}
+      if (!code) {
+        code = randomCode();
+        try { localStorage.setItem('kanavu-my-invite-code', code); } catch (e) {}
+      }
       state.role = 'host';
       state.code = code;
       state.codeCreatedAt = Date.now();
@@ -457,7 +465,7 @@ function init(worldApi, opts) {
     if (state.pairChannel) { try { sb.removeChannel(state.pairChannel); } catch (e) {} state.pairChannel = null; }
     try {
       if (worldApi.setPartnerRemote) worldApi.setPartnerRemote(false);
-      if (worldApi.setPartnerOnline) worldApi.setPartnerOnline(true);
+      if (worldApi.setPartnerOnline) worldApi.setPartnerOnline(false);
     } catch (e) {}
     state.pairId = null; state.partnerName = null; state.partnerOnline = false;
   }

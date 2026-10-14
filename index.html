@@ -210,11 +210,11 @@ box-shadow:0 20px 60px rgba(0,0,0,.6);color:#f4e8d8;font-family:inherit;">
 
 <script src="https://cdn.jsdelivr.net/npm/three@0.160.0/build/three.min.js"></script>
 <script src="https://cdn.jsdelivr.net/npm/@supabase/supabase-js@2"></script>
-<script src="kanavu-world.js?v=17"></script>
-<script src="kanavu-multiplayer.js?v=2"></script>
-<script src="kanavu-music.js?v=3"></script>
+<script src="kanavu-world.js?v=18"></script>
+<script src="kanavu-multiplayer.js?v=3"></script>
+<script src="kanavu-music.js?v=4"></script>
 <script src="kanavu-ambience.js?v=2"></script>
-<script src="kanavu-social.js?v=9"></script>
+<script src="kanavu-social.js?v=10"></script>
 <script>
 (function(){
   'use strict';
@@ -230,6 +230,11 @@ box-shadow:0 20px 60px rgba(0,0,0,.6);color:#f4e8d8;font-family:inherit;">
 
   var sbAuth = null, mp = null, worldApi = null;
   var myName = '', myRole = 'boy', authed = false;
+  // Restore saved name + role (returning users skip both)
+  try {
+    myName = localStorage.getItem('kanavu_player_name') || '';
+    myRole = localStorage.getItem('kanavu_player_role') || 'boy';
+  } catch (e) {}
 
   try { sbAuth = window.supabase.createClient(SUPABASE_URL, ANON_KEY); } catch (e) {}
 
@@ -393,9 +398,30 @@ box-shadow:0 20px 60px rgba(0,0,0,.6);color:#f4e8d8;font-family:inherit;">
       roleBtns.forEach(function(x){ x.classList.remove('sel'); });
       b.classList.add('sel');
       myRole = b.getAttribute('data-role');
+      try { localStorage.setItem('kanavu_player_role', myRole); } catch (e) {}
       if (mp) mp.setMyRole(myRole);
     });
   });
+  // Pre-fill name if known (returning user)
+  try {
+    var savedName = localStorage.getItem('kanavu_player_name');
+    if (savedName) {
+      $('auth-name').value = savedName;
+      $('auth-name').style.display = 'none'; // don't ask again
+    }
+  } catch (e) {}
+  // Hide role picker if role already chosen (returning user)
+  try {
+    var savedRole = localStorage.getItem('kanavu_player_role');
+    if (savedRole) {
+      var roleSection = $('role-pick');
+      if (roleSection) {
+        roleSection.style.display = 'none';
+        var roleLabel = roleSection.previousElementSibling;
+        if (roleLabel) roleLabel.style.display = 'none';
+      }
+    }
+  } catch (e) {}
   function stubWorld(){
     return {
       getPlayerPos: function(){ return {x:0,y:0,z:0}; },
@@ -437,7 +463,7 @@ box-shadow:0 20px 60px rgba(0,0,0,.6);color:#f4e8d8;font-family:inherit;">
     pane('<div style="font-size:14px;">Creating your invite code…</div>');
     m.generateCode().then(function(code){
       pane(
-        '<div class="sub">share this with your partner (24 hours)</div>' +
+        '<div class="sub">share this with your partner (yours forever)</div>' +
         '<div class="code-big">' + code + '</div>' +
         '<button class="btn ghost" id="copy-code" style="width:100%">Copy code</button>' +
         '<div style="font-size:13px;margin:14px 0;color:rgba(244,232,216,.55)" id="wait-note">Waiting for partner… you can head in now.</div>' +
@@ -499,6 +525,7 @@ box-shadow:0 20px 60px rgba(0,0,0,.6);color:#f4e8d8;font-family:inherit;">
           role: role, playerName: myName || 'Player', partnerName: partnerName || 'Tara'
         });
         window.KanavuWorldApi = worldApi;
+        window.worldApi = worldApi; // for customize panel + settings
         if (mp) mp.setWorldApi(worldApi);
         if (window.KanavuSocial) window.KanavuSocial.init(worldApi, mp);
         gameScreen.classList.add('visible');
