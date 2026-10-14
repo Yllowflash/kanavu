@@ -1,11 +1,13 @@
 /* Kanavu Service Worker — offline support + local notifications (M2) */
-var CACHE_NAME = 'kanavu-v9';
+var CACHE_NAME = 'kanavu-v18';
 var ASSETS = [
   './',
   './index.html',
   './kanavu-world.js',
   './kanavu-social.js',
   './kanavu-multiplayer.js',
+  './kanavu-music.js',
+  './kanavu-ambience.js',
   './kanavu-decks.json'
 ];
 
